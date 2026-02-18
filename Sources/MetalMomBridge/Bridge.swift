@@ -1673,6 +1673,57 @@ public func mm_yin(
     return fillBuffer(result, out)
 }
 
+// MARK: - pYIN Probabilistic Pitch Estimation
+
+@_cdecl("mm_pyin")
+public func mm_pyin(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ frameLength: Int32,
+    _ hopLength: Int32,
+    _ nThresholds: Int32,
+    _ betaAlpha: Float,
+    _ betaBeta: Float,
+    _ resolution: Float,
+    _ switchProb: Float,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    // hopLength <= 0 means use default (frameLength/4)
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+
+    let result = YIN.pyin(
+        signal: signal,
+        fMin: fMin,
+        fMax: fMax,
+        sr: Int(sampleRate),
+        frameLength: Int(frameLength),
+        hopLength: hopOpt,
+        nThresholds: Int(nThresholds),
+        betaAlpha: betaAlpha,
+        betaBeta: betaBeta,
+        resolution: resolution,
+        switchProb: switchProb,
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

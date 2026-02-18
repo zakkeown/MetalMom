@@ -227,6 +227,14 @@ ffi.cdef("""
                    float trough_threshold, int32_t center,
                    MMBuffer* out);
 
+    /* pYIN Probabilistic Pitch Estimation */
+    int32_t mm_pyin(mm_context ctx, const float* signal_data, int64_t signal_length,
+                    int32_t sample_rate, float f_min, float f_max,
+                    int32_t frame_length, int32_t hop_length,
+                    int32_t n_thresholds, float beta_alpha, float beta_beta,
+                    float resolution, float switch_prob, int32_t center,
+                    MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

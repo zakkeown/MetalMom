@@ -277,4 +277,178 @@ final class YINTests: XCTestCase {
         XCTAssertEqual(result.shape[0], expectedFrames,
                        "Default hop should be frameLength/4")
     }
+
+    // MARK: - pYIN Tests
+
+    func testPYINOutputShape() {
+        let sr = 22050
+        let signal = makeSineSignal(frequency: 440.0, sr: sr, duration: 1.0)
+        let frameLength = 2048
+        let hopLength = 512
+
+        let result = YIN.pyin(
+            signal: signal,
+            fMin: 65.0,
+            fMax: 2093.0,
+            sr: sr,
+            frameLength: frameLength,
+            hopLength: hopLength,
+            center: true
+        )
+
+        // Should be [3, nFrames]
+        XCTAssertEqual(result.shape.count, 2, "pYIN output should be 2-D")
+        XCTAssertEqual(result.shape[0], 3, "pYIN output row count should be 3")
+
+        let paddedLength = sr + frameLength
+        let expectedFrames = 1 + (paddedLength - frameLength) / hopLength
+        XCTAssertEqual(result.shape[1], expectedFrames,
+                       "Expected \(expectedFrames) frames, got \(result.shape[1])")
+    }
+
+    func testPYINSineWave440() {
+        let sr = 22050
+        let signal = makeSineSignal(frequency: 440.0, sr: sr, duration: 1.0)
+
+        let result = YIN.pyin(
+            signal: signal,
+            fMin: 65.0,
+            fMax: 2093.0,
+            sr: sr,
+            frameLength: 2048,
+            center: true
+        )
+
+        let nFrames = result.shape[1]
+        XCTAssertGreaterThan(nFrames, 0)
+
+        // Check f0 values (row 0) — skip edge frames
+        let startFrame = 2
+        let endFrame = max(startFrame, nFrames - 2)
+        var voicedCount = 0
+        var totalError: Float = 0
+
+        for f in startFrame..<endFrame {
+            let f0 = result[f]  // row 0, col f
+            let voicedFlag = result[nFrames + f]  // row 1, col f
+
+            if voicedFlag > 0.5 && f0 > 0 {
+                voicedCount += 1
+                totalError += abs(f0 - 440.0)
+            }
+        }
+
+        let interiorCount = endFrame - startFrame
+        guard interiorCount > 0 else { return }
+
+        let voicedRatio = Float(voicedCount) / Float(interiorCount)
+        XCTAssertGreaterThan(voicedRatio, 0.7,
+                             "At least 70% of interior frames should be voiced for a pure sine, got \(voicedRatio)")
+
+        if voicedCount > 0 {
+            let avgError = totalError / Float(voicedCount)
+            XCTAssertLessThan(avgError, 10.0,
+                              "Average F0 error should be < 10 Hz for a 440 Hz sine, got \(avgError)")
+        }
+    }
+
+    func testPYINSilence() {
+        let sr = 22050
+        let silence = Signal(data: [Float](repeating: 0, count: sr), sampleRate: sr)
+
+        let result = YIN.pyin(
+            signal: silence,
+            fMin: 65.0,
+            fMax: 2093.0,
+            sr: sr,
+            frameLength: 2048,
+            center: true
+        )
+
+        let nFrames = result.shape[1]
+        XCTAssertGreaterThan(nFrames, 0)
+
+        // Most frames should be unvoiced for silence
+        var unvoicedCount = 0
+        for f in 0..<nFrames {
+            let voicedFlag = result[nFrames + f]
+            if voicedFlag < 0.5 {
+                unvoicedCount += 1
+            }
+        }
+
+        let unvoicedRatio = Float(unvoicedCount) / Float(nFrames)
+        XCTAssertGreaterThan(unvoicedRatio, 0.7,
+                             "At least 70% of frames should be unvoiced for silence, got \(unvoicedRatio)")
+    }
+
+    func testPYINVoicedProbabilitiesInRange() {
+        let sr = 22050
+        let signal = makeSineSignal(frequency: 440.0, sr: sr, duration: 1.0)
+
+        let result = YIN.pyin(
+            signal: signal,
+            fMin: 65.0,
+            fMax: 2093.0,
+            sr: sr,
+            center: true
+        )
+
+        let nFrames = result.shape[1]
+        for f in 0..<nFrames {
+            let prob = result[2 * nFrames + f]  // row 2
+            XCTAssertGreaterThanOrEqual(prob, 0.0,
+                                         "Voiced prob should be >= 0 at frame \(f), got \(prob)")
+            XCTAssertLessThanOrEqual(prob, 1.0,
+                                      "Voiced prob should be <= 1 at frame \(f), got \(prob)")
+        }
+    }
+
+    func testPYINF0InRange() {
+        let sr = 22050
+        let signal = makeSineSignal(frequency: 440.0, sr: sr, duration: 1.0)
+
+        let result = YIN.pyin(
+            signal: signal,
+            fMin: 65.0,
+            fMax: 2093.0,
+            sr: sr,
+            center: true
+        )
+
+        let nFrames = result.shape[1]
+        for f in 0..<nFrames {
+            let f0 = result[f]
+            let voicedFlag = result[nFrames + f]
+            if voicedFlag > 0.5 {
+                XCTAssertGreaterThanOrEqual(f0, 65.0,
+                                             "Voiced f0 should be >= fMin at frame \(f)")
+                XCTAssertLessThanOrEqual(f0, 2093.0,
+                                          "Voiced f0 should be <= fMax at frame \(f)")
+            } else {
+                XCTAssertEqual(f0, 0.0,
+                               "Unvoiced f0 should be 0 at frame \(f), got \(f0)")
+            }
+        }
+    }
+
+    func testPYINVoicedFlagBinary() {
+        let sr = 22050
+        let signal = makeSineSignal(frequency: 440.0, sr: sr, duration: 1.0)
+
+        let result = YIN.pyin(
+            signal: signal,
+            fMin: 65.0,
+            fMax: 2093.0,
+            sr: sr,
+            center: true
+        )
+
+        let nFrames = result.shape[1]
+        for f in 0..<nFrames {
+            let flag = result[nFrames + f]
+            XCTAssertTrue(flag == 0.0 || flag == 1.0,
+                          "Voiced flag should be 0 or 1, got \(flag) at frame \(f)")
+        }
+    }
 }
