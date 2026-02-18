@@ -48,11 +48,11 @@ final class STFTTests: XCTestCase {
         let midFrame = nFrames / 2
 
         // Find peak bin in this frame
-        // Data is column-major: element at (freqBin, frame) = data[freqBin + frame * nFreqs]
+        // Data is row-major: element at (freqBin, frame) = data[freqBin * nFrames + frame]
         var maxVal: Float = -1
         var maxBin = -1
         for bin in 0..<nFreqs {
-            let val = result[bin + midFrame * nFreqs]
+            let val = result[bin * nFrames + midFrame]
             if val > maxVal {
                 maxVal = val
                 maxBin = bin
@@ -117,9 +117,10 @@ final class STFTTests: XCTestCase {
         // times hann window at center = 1.0).
         // Frame index where the original sample[0] ends up: paddedPos / hop = (nFFT/2) / (nFFT/4) = 2
         let targetFrame = 2
+        let nFrames2 = result2.shape[1]
         var magnitudes = [Float]()
         for bin in 0..<nFreqs2 {
-            magnitudes.append(result2[bin + targetFrame * nFreqs2])
+            magnitudes.append(result2[bin * nFrames2 + targetFrame])
         }
 
         let maxMag = magnitudes.max()!

@@ -22,7 +22,7 @@ public struct STFTInput {
 
 /// Output of the STFT computation.
 public struct STFTOutput {
-    /// Magnitude spectrogram with shape [nFreqs, nFrames], column-major.
+    /// Magnitude spectrogram with shape [nFreqs, nFrames], row-major (C-order).
     public let magnitude: Signal
 }
 
@@ -87,10 +87,12 @@ public struct STFT: ComputeOperation {
         }
         defer { vDSP_destroy_fftsetup(fftSetup) }
 
-        // --- 5. Allocate output buffer (column-major: [nFreqs, nFrames]) ---
+        // --- 5. Allocate output buffer (row-major: [nFreqs, nFrames]) ---
+        // We compute into a column-major temp buffer (fast per-frame writes),
+        // then transpose to row-major at the end for NumPy/C-order compatibility.
         let totalElements = nFreqs * nFrames
-        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalElements)
-        outPtr.initialize(repeating: 0, count: totalElements)
+        let tempPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalElements)
+        tempPtr.initialize(repeating: 0, count: totalElements)
 
         // Temporary buffer for each frame's FFT
         // vDSP_fft_zrip works on nFFT/2 complex pairs
@@ -149,14 +151,14 @@ public struct STFT: ComputeOperation {
 
                     // DC bin (index 0): magnitude = |realp[0]| (imagp[0] holds Nyquist, not DC imag)
                     let dcVal = realPart[0]
-                    outPtr[colOffset + 0] = abs(dcVal)
+                    tempPtr[colOffset + 0] = abs(dcVal)
 
                     // Nyquist bin (index nFreqs - 1 = halfN): magnitude = |imagp[0]|
                     // After scaling, imagp[0] holds the Nyquist real component / 2...
                     // Actually, vDSP packs DC in realp[0] and Nyquist in imagp[0].
                     // Both are purely real. After our 0.5 scaling, the values are correct.
                     let nyquistVal = imagPart[0]
-                    outPtr[colOffset + nFreqs - 1] = abs(nyquistVal)
+                    tempPtr[colOffset + nFreqs - 1] = abs(nyquistVal)
 
                     // Bins 1..<halfN: magnitude = sqrt(real^2 + imag^2)
                     // Use vDSP_zvabs but we need to handle offset pointers for bins 1..<halfN
@@ -165,10 +167,20 @@ public struct STFT: ComputeOperation {
                         realp: realPart + 1,
                         imagp: imagPart + 1
                     )
-                    vDSP_zvabs(&innerSplit, 1, outPtr + colOffset + 1, 1, vDSP_Length(halfN - 1))
+                    vDSP_zvabs(&innerSplit, 1, tempPtr + colOffset + 1, 1, vDSP_Length(halfN - 1))
                 }
             }
         }
+
+        // --- 8. Transpose from column-major [nFreqs x nFrames] to row-major ---
+        // tempPtr layout: column-major [nFreqs, nFrames] = tempPtr[frame * nFreqs + freq]
+        // outPtr layout: row-major [nFreqs, nFrames]     = outPtr[freq * nFrames + frame]
+        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalElements)
+        // vDSP_mtrans transposes an M x N matrix (row-major) to N x M (row-major).
+        // Treating tempPtr as nFrames rows x nFreqs cols (row-major reading of column-major data),
+        // we transpose to get nFreqs rows x nFrames cols.
+        vDSP_mtrans(tempPtr, 1, outPtr, 1, vDSP_Length(nFreqs), vDSP_Length(nFrames))
+        tempPtr.deallocate()
 
         let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: totalElements)
         let output = Signal(taking: outBuffer, shape: [nFreqs, nFrames],
