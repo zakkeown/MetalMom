@@ -3028,6 +3028,50 @@ public func mm_mfcc_to_mel(
     return fillBuffer(result, out)
 }
 
+// MARK: - NMF (Non-negative Matrix Factorization)
+
+@_cdecl("mm_nmf")
+public func mm_nmf(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ nFeatures: Int32,
+    _ nSamples: Int32,
+    _ sampleRate: Int32,
+    _ nComponents: Int32,
+    _ nIter: Int32,
+    _ objectiveType: Int32,
+    _ outW: UnsafeMutablePointer<MMBuffer>?,
+    _ outH: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data,
+          nFeatures > 0,
+          nSamples > 0,
+          nComponents > 0,
+          nIter > 0,
+          let outW = outW,
+          let outH = outH else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let totalCount = Int(nFeatures) * Int(nSamples)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: totalCount))
+    let V = Signal(data: inputArray, shape: [Int(nFeatures), Int(nSamples)],
+                   sampleRate: Int(sampleRate))
+
+    let objective: NMF.Objective = objectiveType == 1 ? .klDivergence : .euclidean
+
+    let result = NMF.decompose(
+        V,
+        nComponents: Int(nComponents),
+        nIter: Int(nIter),
+        objective: objective
+    )
+
+    let wStatus = fillBuffer(result.W, outW)
+    guard wStatus == MM_OK else { return wStatus }
+    return fillBuffer(result.H, outH)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

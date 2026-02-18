@@ -415,6 +415,11 @@ ffi.cdef("""
                             int32_t n_mfcc, int32_t n_frames, int32_t sample_rate,
                             int32_t n_mels, MMBuffer* out);
 
+    /* NMF (Non-negative Matrix Factorization) */
+    int32_t mm_nmf(mm_context ctx, const float* data, int32_t n_features, int32_t n_samples,
+                   int32_t sample_rate, int32_t n_components, int32_t n_iter,
+                   int32_t objective, MMBuffer* out_w, MMBuffer* out_h);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

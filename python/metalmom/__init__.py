@@ -22,3 +22,4 @@ from .key import key_detect
 from .chord import chord_detect
 from .transcribe import piano_transcribe
 from .cqt import cqt, vqt, hybrid_cqt
+from .decompose import nmf
