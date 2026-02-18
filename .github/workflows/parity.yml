@@ -9,6 +9,9 @@ jobs:
   parity-tests:
     name: Parity & Compat Tests
     runs-on: macos-14
+    permissions:
+      issues: write
+      contents: read
 
     steps:
       - name: Checkout
@@ -40,3 +43,12 @@ jobs:
         with:
           name: parity-results
           path: parity-results.xml
+
+      - name: File GitHub issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/ci/file_parity_issues.py \
+            --report parity-results.xml \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
