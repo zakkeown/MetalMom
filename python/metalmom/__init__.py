@@ -31,4 +31,10 @@ from .convert import (
     frames_to_samples, samples_to_frames,
     fft_frequencies, mel_frequencies,
 )
-from .filters import semitone_filterbank, semitone_frequencies
+from .display import specshow, waveshow
+from .filters import (
+    semitone_filterbank, semitone_frequencies,
+    mel as mel_filterbank, chroma as chroma_filterbank,
+    constant_q as constant_q_filterbank,
+)
+from . import filters
