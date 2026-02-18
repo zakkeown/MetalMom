@@ -13,4 +13,4 @@ from .feature import (
 )
 from .evaluate import onset_evaluate, beat_evaluate, tempo_evaluate, chord_accuracy
 from .onset import onset_strength, onset_detect
-from .beat import beat_track
+from .beat import beat_track, plp

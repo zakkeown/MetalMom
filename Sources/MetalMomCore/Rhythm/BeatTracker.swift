@@ -185,6 +185,225 @@ public enum BeatTracker {
         return result
     }
 
+    // MARK: - Predominant Local Pulse (PLP)
+
+    /// Compute Predominant Local Pulse (Grosche & Müller 2011).
+    ///
+    /// Estimates a local pulse curve from the tempogram by finding the
+    /// dominant tempo frequency in each frame of a windowed FFT of the
+    /// onset envelope, generating phased cosines, overlap-adding, and
+    /// half-wave rectifying.
+    ///
+    /// - Parameters:
+    ///   - signal: Input audio signal (1D).
+    ///   - sr: Sample rate override. If nil, uses signal.sampleRate.
+    ///   - hopLength: Hop length for onset envelope. Default 512.
+    ///   - nFFT: FFT window size for onset envelope. Default 2048.
+    ///   - nMels: Number of mel bands for onset envelope. Default 128.
+    ///   - fmin: Minimum frequency for mel filterbank. Default 0.
+    ///   - fmax: Maximum frequency. If nil, uses sr/2.
+    ///   - center: Center-pad onset envelope windows. Default true.
+    ///   - winLength: Window length for local tempogram analysis. Default 384.
+    ///   - tempoMin: Minimum tempo in BPM. Default 30.
+    ///   - tempoMax: Maximum tempo in BPM. Default 300.
+    /// - Returns: 1D Signal of local pulse strength (same length as onset envelope).
+    public static func plp(
+        signal: Signal,
+        sr: Int? = nil,
+        hopLength: Int? = nil,
+        nFFT: Int = 2048,
+        nMels: Int = 128,
+        fmin: Float = 0,
+        fmax: Float? = nil,
+        center: Bool = true,
+        winLength: Int = 384,
+        tempoMin: Float = 30,
+        tempoMax: Float = 300
+    ) -> Signal {
+        let sampleRate = sr ?? signal.sampleRate
+        let hop = hopLength ?? 512
+
+        // 1. Compute onset strength envelope
+        let oenv = OnsetDetection.onsetStrength(
+            signal: signal,
+            sr: sampleRate,
+            nFFT: nFFT,
+            hopLength: hop,
+            nMels: nMels,
+            fmin: fmin,
+            fmax: fmax,
+            center: center,
+            aggregate: true
+        )
+
+        let envLen = oenv.shape.count > 1 ? oenv.shape[1] : oenv.shape[0]
+        guard envLen > 0 else {
+            return Signal(data: [], shape: [0], sampleRate: sampleRate)
+        }
+
+        var envData = [Float](repeating: 0, count: envLen)
+        oenv.withUnsafeBufferPointer { buf in
+            for i in 0..<envLen { envData[i] = buf[i] }
+        }
+
+        // Check if envelope has any energy; if not, return zeros
+        var envMax: Float = 0
+        vDSP_maxv(envData, 1, &envMax, vDSP_Length(envLen))
+        if envMax <= 1e-10 {
+            return Signal(data: [Float](repeating: 0, count: envLen),
+                          shape: [envLen], sampleRate: sampleRate)
+        }
+
+        // 2. Pad with winLength/2 zeros on each side for center alignment
+        let halfWin = winLength / 2
+        let padded = [Float](repeating: 0, count: halfWin)
+                     + envData
+                     + [Float](repeating: 0, count: halfWin)
+
+        // 3. Build Hann window
+        var hann = [Float](repeating: 0, count: winLength)
+        let hannScale = 2.0 * Float.pi / Float(winLength)
+        for i in 0..<winLength {
+            hann[i] = 0.5 * (1.0 - cos(hannScale * Float(i)))
+        }
+
+        // 4. Determine FFT size (next power of 2 >= winLength)
+        var fftSize = 1
+        while fftSize < winLength { fftSize <<= 1 }
+        let log2n = vDSP_Length(log2(Double(fftSize)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            return Signal(data: [Float](repeating: 0, count: envLen),
+                          shape: [envLen], sampleRate: sampleRate)
+        }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
+
+        let halfFFT = fftSize / 2
+
+        // 5. Convert tempo range to frequency bin range.
+        // The FFT of the onset envelope has a "sample rate" of (sr/hop) Hz.
+        // Frequency resolution: df = (sr/hop) / fftSize
+        // BPM -> Hz: f = bpm / 60
+        // bin = f / df = bpm / 60 * fftSize / (sr/hop) = bpm * fftSize * hop / (60 * sr)
+        let bpmToFreqBin = Float(fftSize) * Float(hop) / (60.0 * Float(sampleRate))
+        let minBin = max(1, Int(floor(tempoMin * bpmToFreqBin)))
+        let maxBin = min(halfFFT - 1, Int(ceil(tempoMax * bpmToFreqBin)))
+
+        guard minBin <= maxBin else {
+            return Signal(data: [Float](repeating: 0, count: envLen),
+                          shape: [envLen], sampleRate: sampleRate)
+        }
+
+        // 6. Overlap-add accumulator and normalization
+        var output = [Float](repeating: 0, count: envLen + winLength)
+
+        let nFrames = envLen
+
+        // Reusable FFT buffers
+        var realBuf = [Float](repeating: 0, count: halfFFT)
+        var imagBuf = [Float](repeating: 0, count: halfFFT)
+
+        for frame in 0..<nFrames {
+            let centerIdx = frame + halfWin
+            let startIdx = centerIdx - halfWin
+
+            // Extract and window the segment
+            var segment = [Float](repeating: 0, count: fftSize)
+            for i in 0..<winLength {
+                let pIdx = startIdx + i
+                if pIdx >= 0 && pIdx < padded.count {
+                    segment[i] = padded[pIdx] * hann[i]
+                }
+            }
+
+            // FFT to get complex spectrum
+            var peakBin = minBin
+            var peakMag: Float = 0
+            var peakPhase: Float = 0
+
+            segment.withUnsafeMutableBufferPointer { segBuf in
+                realBuf.withUnsafeMutableBufferPointer { rBuf in
+                    imagBuf.withUnsafeMutableBufferPointer { iBuf in
+                        var splitComplex = DSPSplitComplex(
+                            realp: rBuf.baseAddress!,
+                            imagp: iBuf.baseAddress!
+                        )
+
+                        segBuf.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfFFT) { complexPtr in
+                            vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfFFT))
+                        }
+
+                        vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(kFFTDirection_Forward))
+
+                        // Find peak bin in valid BPM range
+                        for k in minBin...maxBin {
+                            if k < halfFFT {
+                                let re = splitComplex.realp[k]
+                                let im = splitComplex.imagp[k]
+                                let mag = re * re + im * im  // squared magnitude is fine for comparison
+                                if mag > peakMag {
+                                    peakMag = mag
+                                    peakBin = k
+                                    peakPhase = atan2(im, re)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Generate a windowed cosine at the dominant frequency with the correct phase
+            // The frequency in cycles per sample (of the onset envelope) is:
+            //   freq = peakBin / fftSize
+            // So the angular frequency is: omega = 2*pi * peakBin / fftSize
+            let omega = 2.0 * Float.pi * Float(peakBin) / Float(fftSize)
+
+            // The phase from the FFT corresponds to the phase at the center of the window.
+            // We construct a cosine centered at the window center.
+            for i in 0..<winLength {
+                let t = Float(i - halfWin)  // time relative to center
+                let cosVal = cos(omega * t + peakPhase)
+                let windowed = cosVal * hann[i]
+
+                // Overlap-add into output at position (frame)
+                let outIdx = frame + i
+                if outIdx >= 0 && outIdx < output.count {
+                    output[outIdx] += windowed
+                }
+            }
+        }
+
+        // 7. Extract the relevant portion (aligned with onset envelope frames)
+        // The overlap-add starts at frame 0 and the center of each window is at frame + halfWin.
+        // We want output aligned so that index i corresponds to onset envelope frame i.
+        // The OLA for frame 0 writes to indices 0..<winLength, with center at halfWin.
+        // So the pulse for frame f is at output[f + halfWin].
+        // Actually, since we wrote to output[frame + i] where i goes 0..<winLength,
+        // and the center of the window is at i=halfWin, the pulse center for frame f
+        // is at output[f + halfWin]. But we want output[f] to correspond to frame f.
+        // So we shift by halfWin.
+        var pulse = [Float](repeating: 0, count: envLen)
+        for i in 0..<envLen {
+            let idx = i + halfWin
+            if idx < output.count {
+                pulse[i] = output[idx]
+            }
+        }
+
+        // 8. Half-wave rectify: clip negative values to 0
+        var zero: Float = 0
+        vDSP_vthres(pulse, 1, &zero, &pulse, 1, vDSP_Length(envLen))
+
+        // 9. Normalize to [0, 1]
+        var maxVal: Float = 0
+        vDSP_maxv(pulse, 1, &maxVal, vDSP_Length(envLen))
+        if maxVal > 0 {
+            var invMax = 1.0 / maxVal
+            vDSP_vsmul(pulse, 1, &invMax, &pulse, 1, vDSP_Length(envLen))
+        }
+
+        return Signal(data: pulse, shape: [envLen], sampleRate: sampleRate)
+    }
+
     // MARK: - Dynamic Programming Beat Tracking
 
     /// Find optimal beat sequence using dynamic programming (Ellis 2007).

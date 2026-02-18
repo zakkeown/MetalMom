@@ -208,6 +208,14 @@ int32_t mm_fourier_tempogram(mm_context ctx, const float* signal_data, int64_t s
                              int32_t center, int32_t win_length,
                              MMBuffer* out);
 
+/* Predominant Local Pulse (PLP) */
+int32_t mm_plp(mm_context ctx, const float* signal_data, int64_t signal_length,
+               int32_t sample_rate, int32_t hop_length, int32_t n_fft,
+               int32_t n_mels, float f_min, float f_max,
+               int32_t center, int32_t win_length,
+               float tempo_min, float tempo_max,
+               MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

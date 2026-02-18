@@ -5,6 +5,81 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
+def plp(y=None, sr=22050, onset_envelope=None, hop_length=512,
+        n_fft=2048, n_mels=128, fmin=0.0, fmax=None,
+        center=True, win_length=384,
+        tempo_min=30.0, tempo_max=300.0, **kwargs):
+    """Compute Predominant Local Pulse (Grosche & Mueller 2011).
+
+    Estimates a local pulse (periodicity) curve from the tempogram.
+    Peaks of this curve correspond to beat positions.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal.
+    sr : int
+        Sample rate. Default: 22050.
+    onset_envelope : np.ndarray or None
+        Pre-computed onset strength envelope (accepted for API
+        compatibility but ignored -- the native code computes its
+        own envelope from ``y``).
+    hop_length : int
+        Hop length. Default: 512.
+    n_fft : int
+        FFT window size for onset envelope. Default: 2048.
+    n_mels : int
+        Number of mel bands. Default: 128.
+    fmin : float
+        Minimum frequency for mel filterbank. Default: 0.0.
+    fmax : float or None
+        Maximum frequency. Default: None (sr/2).
+    center : bool
+        Center-pad onset windows. Default: True.
+    win_length : int
+        Window length for local tempogram analysis. Default: 384.
+    tempo_min : float
+        Minimum tempo in BPM. Default: 30.0.
+    tempo_max : float
+        Maximum tempo in BPM. Default: 300.0.
+
+    Returns
+    -------
+    np.ndarray
+        Pulse curve, shape ``(n_frames,)``.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_fmax = float(fmax) if fmax is not None else 0.0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_plp(
+            ctx, signal_ptr, len(y),
+            sr, hop_length, n_fft,
+            n_mels, fmin, c_fmax,
+            1 if center else 0, win_length,
+            tempo_min, tempo_max,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_plp failed with status {status}")
+
+        result = buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+    return result.ravel()
+
+
 def beat_track(y=None, sr=22050, onset_envelope=None, hop_length=512,
                n_fft=2048, n_mels=128, fmin=0.0, fmax=None,
                start_bpm=120.0, trim=True, units='frames', **kwargs):

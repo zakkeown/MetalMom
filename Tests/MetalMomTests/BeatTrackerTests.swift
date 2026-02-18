@@ -242,4 +242,138 @@ final class BeatTrackerTests: XCTestCase {
         )
         XCTAssertEqual(tempo, 0, "Single frame should return 0 tempo")
     }
+
+    // MARK: - PLP Tests
+
+    func testPLPOutputLength() {
+        // PLP output length should match onset envelope length
+        let sr = 22050
+        let duration = 3.0
+        let n = Int(Double(sr) * duration)
+        var samples = [Float](repeating: 0, count: n)
+
+        // Clicks at 120 BPM
+        var t = 0.0
+        while t < duration {
+            let idx = Int(t * Double(sr))
+            for j in 0..<256 where idx + j < n {
+                samples[idx + j] = sin(Float(j) * 1000.0 * 2.0 * .pi / Float(sr)) * 0.9
+            }
+            t += 0.5
+        }
+
+        let signal = Signal(data: samples, sampleRate: sr)
+        let pulse = BeatTracker.plp(signal: signal, sr: sr)
+
+        // Compute expected onset envelope length for comparison
+        let oenv = OnsetDetection.onsetStrength(
+            signal: signal, sr: sr, nFFT: 2048, hopLength: 512,
+            nMels: 128, fmin: 0, fmax: nil, center: true, aggregate: true
+        )
+        let expectedLen = oenv.shape.count > 1 ? oenv.shape[1] : oenv.shape[0]
+
+        XCTAssertEqual(pulse.count, expectedLen,
+                       "PLP output length should match onset envelope length")
+    }
+
+    func testPLPNonNegative() {
+        // PLP values should be non-negative (half-wave rectified)
+        let sr = 22050
+        let duration = 3.0
+        let n = Int(Double(sr) * duration)
+        var samples = [Float](repeating: 0, count: n)
+
+        var t = 0.0
+        while t < duration {
+            let idx = Int(t * Double(sr))
+            for j in 0..<256 where idx + j < n {
+                samples[idx + j] = sin(Float(j) * 1000.0 * 2.0 * .pi / Float(sr)) * 0.9
+            }
+            t += 0.5
+        }
+
+        let signal = Signal(data: samples, sampleRate: sr)
+        let pulse = BeatTracker.plp(signal: signal, sr: sr)
+
+        pulse.withUnsafeBufferPointer { buf in
+            for i in 0..<pulse.count {
+                XCTAssertGreaterThanOrEqual(buf[i], 0,
+                    "PLP values should be non-negative (half-wave rectified) at index \(i)")
+            }
+        }
+    }
+
+    func testPLPPeriodicSignalHasPeaks() {
+        // A periodic click signal should produce a PLP with clear peaks
+        let sr = 22050
+        let duration = 5.0
+        let n = Int(Double(sr) * duration)
+        var samples = [Float](repeating: 0, count: n)
+
+        // Clicks at 120 BPM
+        var t = 0.0
+        while t < duration {
+            let idx = Int(t * Double(sr))
+            for j in 0..<256 where idx + j < n {
+                samples[idx + j] = sin(Float(j) * 1000.0 * 2.0 * .pi / Float(sr)) * 0.9
+            }
+            t += 0.5
+        }
+
+        let signal = Signal(data: samples, sampleRate: sr)
+        let pulse = BeatTracker.plp(signal: signal, sr: sr)
+
+        // The pulse curve should have some non-zero values
+        var maxVal: Float = 0
+        pulse.withUnsafeBufferPointer { buf in
+            for i in 0..<pulse.count {
+                if buf[i] > maxVal { maxVal = buf[i] }
+            }
+        }
+        XCTAssertGreaterThan(maxVal, 0, "PLP of periodic signal should have non-zero peaks")
+    }
+
+    func testPLPSilenceReturnsLowValues() {
+        // Silence should produce near-zero PLP
+        let sr = 22050
+        let signal = Signal(data: [Float](repeating: 0, count: sr * 2), sampleRate: sr)
+        let pulse = BeatTracker.plp(signal: signal, sr: sr)
+
+        // Should not crash and values should be very small
+        var maxVal: Float = 0
+        pulse.withUnsafeBufferPointer { buf in
+            for i in 0..<pulse.count {
+                if buf[i] > maxVal { maxVal = buf[i] }
+            }
+        }
+        // For silence, onset envelope is zero so the PLP should also be zero/near-zero
+        XCTAssertLessThanOrEqual(maxVal, 1e-6, "PLP of silence should be near-zero")
+    }
+
+    func testPLPNormalizedToUnitRange() {
+        // PLP should be normalized to [0, 1]
+        let sr = 22050
+        let duration = 3.0
+        let n = Int(Double(sr) * duration)
+        var samples = [Float](repeating: 0, count: n)
+
+        var t = 0.0
+        while t < duration {
+            let idx = Int(t * Double(sr))
+            for j in 0..<256 where idx + j < n {
+                samples[idx + j] = sin(Float(j) * 1000.0 * 2.0 * .pi / Float(sr)) * 0.9
+            }
+            t += 0.5
+        }
+
+        let signal = Signal(data: samples, sampleRate: sr)
+        let pulse = BeatTracker.plp(signal: signal, sr: sr)
+
+        pulse.withUnsafeBufferPointer { buf in
+            for i in 0..<pulse.count {
+                XCTAssertLessThanOrEqual(buf[i], 1.0 + 1e-6,
+                    "PLP values should be <= 1.0 at index \(i)")
+            }
+        }
+    }
 }

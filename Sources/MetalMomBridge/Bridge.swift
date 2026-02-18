@@ -1581,6 +1581,55 @@ public func mm_fourier_tempogram(
     return fillBuffer(result, out)
 }
 
+// MARK: - Predominant Local Pulse (PLP)
+
+@_cdecl("mm_plp")
+public func mm_plp(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ nFFT: Int32,
+    _ nMels: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ center: Int32,
+    _ winLength: Int32,
+    _ tempoMin: Float,
+    _ tempoMax: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+
+    let result = BeatTracker.plp(
+        signal: signal,
+        sr: Int(sampleRate),
+        hopLength: hopOpt,
+        nFFT: Int(nFFT),
+        nMels: Int(nMels),
+        fmin: fMin,
+        fmax: fMaxOpt,
+        center: center != 0,
+        winLength: Int(winLength),
+        tempoMin: tempoMin,
+        tempoMax: tempoMax
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
