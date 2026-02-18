@@ -2135,6 +2135,56 @@ public func mm_split(
     return fillBuffer(result, out)
 }
 
+// MARK: - Preemphasis
+
+@_cdecl("mm_preemphasis")
+public func mm_preemphasis(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ coef: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let result = Preemphasis.preemphasis(signal: signal, coef: coef)
+    return fillBuffer(result, out)
+}
+
+// MARK: - Deemphasis
+
+@_cdecl("mm_deemphasis")
+public func mm_deemphasis(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ coef: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let result = Preemphasis.deemphasis(signal: signal, coef: coef)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

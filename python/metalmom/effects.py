@@ -5,7 +5,10 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
-__all__ = ["hpss", "harmonic", "percussive", "time_stretch", "pitch_shift", "trim", "split"]
+__all__ = [
+    "hpss", "harmonic", "percussive", "time_stretch", "pitch_shift",
+    "trim", "split", "preemphasis", "deemphasis",
+]
 
 
 def hpss(y, kernel_size=31, power=2.0, margin=1.0,
@@ -415,5 +418,107 @@ def split(y, top_db=60, ref=None, frame_length=2048, hop_length=512, **kwargs):
         if result.size == 0:
             return np.empty((0, 2), dtype=result.dtype)
         return result.reshape(-1, 2)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def preemphasis(y, coef=0.97, zi=None, return_zf=False, **kwargs):
+    """Apply a preemphasis filter to an audio signal.
+
+    Implements the first-order high-pass filter
+    ``y[n] = x[n] - coef * x[n-1]``, matching the behavior of
+    ``librosa.effects.preemphasis``.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1-D).
+    coef : float
+        Filter coefficient. Default: 0.97.
+    zi : ignored
+        Accepted for librosa API compatibility but not used.
+    return_zf : ignored
+        Accepted for librosa API compatibility but not used.
+
+    Returns
+    -------
+    np.ndarray
+        Filtered signal (1-D), same length as input.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_preemphasis(
+            ctx, signal_ptr, len(y),
+            22050,  # sample_rate (not used in algorithm, but required by bridge)
+            float(coef),
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_preemphasis failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        return result.ravel()
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def deemphasis(y, coef=0.97, zi=None, return_zf=False, **kwargs):
+    """Apply a deemphasis filter to an audio signal.
+
+    Implements the first-order low-pass filter
+    ``y[n] = x[n] + coef * y[n-1]``, which is the inverse of
+    preemphasis: ``deemphasis(preemphasis(x)) == x``.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1-D).
+    coef : float
+        Filter coefficient. Default: 0.97.
+    zi : ignored
+        Accepted for librosa API compatibility but not used.
+    return_zf : ignored
+        Accepted for librosa API compatibility but not used.
+
+    Returns
+    -------
+    np.ndarray
+        Filtered signal (1-D), same length as input.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_deemphasis(
+            ctx, signal_ptr, len(y),
+            22050,  # sample_rate (not used in algorithm, but required by bridge)
+            float(coef),
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_deemphasis failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        return result.ravel()
     finally:
         lib.mm_destroy(ctx)

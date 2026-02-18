@@ -292,6 +292,14 @@ ffi.cdef("""
                      int32_t frame_length, int32_t hop_length,
                      MMBuffer* out);
 
+    /* Preemphasis */
+    int32_t mm_preemphasis(mm_context ctx, const float* signal_data, int64_t signal_length,
+                           int32_t sample_rate, float coef, MMBuffer* out);
+
+    /* Deemphasis */
+    int32_t mm_deemphasis(mm_context ctx, const float* signal_data, int64_t signal_length,
+                          int32_t sample_rate, float coef, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)
