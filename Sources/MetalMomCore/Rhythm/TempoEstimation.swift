@@ -86,6 +86,99 @@ public enum TempoEstimation {
         )
     }
 
+    /// Estimate tempo using a comb filter bank.
+    ///
+    /// 1. Computes onset strength envelope
+    /// 2. Passes it through a bank of comb filters at different tempos
+    /// 3. Returns the tempo with highest comb filter energy
+    ///
+    /// - Parameters:
+    ///   - signal: Input audio signal.
+    ///   - sr: Sample rate.
+    ///   - hopLength: Hop length. Default 512.
+    ///   - nFFT: FFT window size. Default 2048.
+    ///   - nMels: Number of mel bands. Default 128.
+    ///   - fmin: Min frequency. Default 0.
+    ///   - fmax: Max frequency. Default nil (sr/2).
+    ///   - minBPM: Minimum tempo. Default 30.
+    ///   - maxBPM: Maximum tempo. Default 300.
+    ///   - alpha: Comb filter gain. Default 0.99.
+    /// - Returns: Estimated tempo in BPM.
+    public static func combFilterTempo(
+        signal: Signal,
+        sr: Int? = nil,
+        hopLength: Int? = nil,
+        nFFT: Int = 2048,
+        nMels: Int = 128,
+        fmin: Float = 0,
+        fmax: Float? = nil,
+        minBPM: Float = 30.0,
+        maxBPM: Float = 300.0,
+        alpha: Float = 0.99
+    ) -> Float {
+        let sampleRate = sr ?? signal.sampleRate
+        let hop = hopLength ?? 512
+
+        // 1. Compute onset strength envelope
+        let oenv = OnsetDetection.onsetStrength(
+            signal: signal,
+            sr: sampleRate,
+            nFFT: nFFT,
+            hopLength: hop,
+            nMels: nMels,
+            fmin: fmin,
+            fmax: fmax,
+            center: true,
+            aggregate: true
+        )
+
+        let nFrames = oenv.shape.count > 1 ? oenv.shape[1] : oenv.shape[0]
+        guard nFrames > 1 else {
+            return (minBPM + maxBPM) / 2.0
+        }
+
+        // 2. Extract envelope data
+        var envData = [Float](repeating: 0, count: nFrames)
+        oenv.withUnsafeBufferPointer { buf in
+            for i in 0..<nFrames {
+                envData[i] = buf[i]
+            }
+        }
+
+        // 3. Normalize envelope to [0, 1]
+        var envMax: Float = 0
+        vDSP_maxv(envData, 1, &envMax, vDSP_Length(nFrames))
+        if envMax > 0 {
+            var scale = 1.0 / envMax
+            vDSP_vsmul(envData, 1, &scale, &envData, 1, vDSP_Length(nFrames))
+        } else {
+            // Silence: return midpoint of BPM range
+            return (minBPM + maxBPM) / 2.0
+        }
+
+        // 4. Run comb filter bank
+        let fps = Float(sampleRate) / Float(hop)
+        let (tempos, energies) = CombFilter.tempoFilterBank(
+            signal: envData,
+            fps: fps,
+            minBPM: minBPM,
+            maxBPM: maxBPM,
+            bpmStep: 1.0,
+            alpha: alpha
+        )
+
+        guard !tempos.isEmpty else {
+            return (minBPM + maxBPM) / 2.0
+        }
+
+        // 5. Find BPM with maximum energy
+        var maxIdx: vDSP_Length = 0
+        var maxEnergy: Float = 0
+        vDSP_maxvi(energies, 1, &maxEnergy, &maxIdx, vDSP_Length(energies.count))
+
+        return tempos[Int(maxIdx)]
+    }
+
     // MARK: - Internal
 
     /// Estimate tempo from a pre-computed onset envelope using ACF with log-normal prior.
