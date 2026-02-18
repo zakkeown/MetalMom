@@ -1,0 +1,42 @@
+name: Parity Tests (Weekly)
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"  # Sunday midnight UTC
+  workflow_dispatch:
+
+jobs:
+  parity-tests:
+    name: Parity & Compat Tests
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Swift ────────────────────────────────────────────────
+      - name: Build Swift package
+        run: swift build
+
+      - name: Build dylib
+        run: ./scripts/build_dylib.sh
+
+      # ── Python ───────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: pip install numpy cffi soundfile pytest librosa mir_eval matplotlib
+
+      # ── Parity tests ────────────────────────────────────────
+      - name: Run parity tests
+        run: pytest Tests/ -v --tb=long -k "parity or compat" --junit-xml=parity-results.xml
+
+      - name: Upload parity results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-results
+          path: parity-results.xml
