@@ -1972,6 +1972,43 @@ public func mm_percussive(
     return fillBuffer(result, out)
 }
 
+// MARK: - Time Stretching
+
+@_cdecl("mm_time_stretch")
+public func mm_time_stretch(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ rate: Float,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          rate > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+
+    let result = TimeStretch.timeStretch(
+        signal: signal,
+        rate: rate,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

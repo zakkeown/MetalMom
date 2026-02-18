@@ -5,7 +5,7 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
-__all__ = ["hpss", "harmonic", "percussive"]
+__all__ = ["hpss", "harmonic", "percussive", "time_stretch"]
 
 
 def hpss(y, kernel_size=31, power=2.0, margin=1.0,
@@ -181,6 +181,62 @@ def percussive(y, **kwargs):
         )
         if status != 0:
             raise RuntimeError(f"mm_percussive failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        return result.ravel()
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def time_stretch(y, rate, sr=22050, n_fft=2048, hop_length=None, **kwargs):
+    """Time-stretch audio by the given rate.
+
+    Uses a phase vocoder to change the duration of the signal without
+    changing its pitch.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1-D).
+    rate : float
+        Stretch rate. rate > 1 speeds up (shorter output),
+        rate < 1 slows down (longer output).
+    sr : int
+        Sample rate. Default: 22050.
+    n_fft : int
+        FFT size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: n_fft // 4.
+
+    Returns
+    -------
+    np.ndarray
+        Time-stretched audio signal (1-D).
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+    if rate <= 0:
+        raise ValueError("rate must be positive")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_hop = int(hop_length) if hop_length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_time_stretch(
+            ctx, signal_ptr, len(y),
+            sr, float(rate),
+            n_fft, c_hop,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_time_stretch failed with status {status}")
 
         result = buffer_to_numpy(out)
         return result.ravel()

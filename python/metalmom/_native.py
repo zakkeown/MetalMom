@@ -268,6 +268,12 @@ ffi.cdef("""
                           int32_t kernel_size, float power, float margin,
                           MMBuffer* out);
 
+    /* Time Stretching */
+    int32_t mm_time_stretch(mm_context ctx, const float* signal_data, int64_t signal_length,
+                            int32_t sample_rate, float rate,
+                            int32_t n_fft, int32_t hop_length,
+                            MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)
