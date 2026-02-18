@@ -35,6 +35,19 @@ stft_power = stft_magnitude ** 2
 stft_power_db = librosa.power_to_db(stft_power, ref=np.max)
 np.save(os.path.join(GOLDEN_DIR, "stft_440hz_power_db.npy"), stft_power_db)
 
+# ── Mel filterbank golden files ──
+# Default params: sr=22050, n_fft=2048, n_mels=128, htk=False (Slaney)
+mel_fb_128_2048 = librosa.filters.mel(sr=22050, n_fft=2048, n_mels=128)
+np.save(os.path.join(GOLDEN_DIR, "mel_filterbank_128_2048.npy"), mel_fb_128_2048)
+
+# Smaller variant: sr=22050, n_fft=1024, n_mels=40
+mel_fb_40_1024 = librosa.filters.mel(sr=22050, n_fft=1024, n_mels=40)
+np.save(os.path.join(GOLDEN_DIR, "mel_filterbank_40_1024.npy"), mel_fb_40_1024)
+
+# With custom fmin/fmax: sr=22050, n_fft=2048, n_mels=64, fmin=300, fmax=8000
+mel_fb_custom = librosa.filters.mel(sr=22050, n_fft=2048, n_mels=64, fmin=300, fmax=8000)
+np.save(os.path.join(GOLDEN_DIR, "mel_filterbank_64_2048_300_8000.npy"), mel_fb_custom)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -42,4 +55,7 @@ print(f"STFT dtype: {stft_magnitude.dtype}")
 print(f"STFT max: {stft_magnitude.max():.6f}")
 print(f"amplitude_to_db shape: {stft_amplitude_db.shape}, range: [{stft_amplitude_db.min():.2f}, {stft_amplitude_db.max():.2f}]")
 print(f"power_to_db shape: {stft_power_db.shape}, range: [{stft_power_db.min():.2f}, {stft_power_db.max():.2f}]")
+print(f"mel_fb_128_2048 shape: {mel_fb_128_2048.shape}, dtype: {mel_fb_128_2048.dtype}, range: [{mel_fb_128_2048.min():.6f}, {mel_fb_128_2048.max():.6f}]")
+print(f"mel_fb_40_1024 shape: {mel_fb_40_1024.shape}")
+print(f"mel_fb_custom shape: {mel_fb_custom.shape}")
 print(f"Golden files saved to {GOLDEN_DIR}")
