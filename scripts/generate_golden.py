@@ -93,6 +93,27 @@ np.save(os.path.join(GOLDEN_DIR, "chroma_stft_440hz_default.npy"), chroma_defaul
 chroma_1024 = librosa.feature.chroma_stft(y=signal_440, sr=22050, n_fft=1024, norm=None)
 np.save(os.path.join(GOLDEN_DIR, "chroma_stft_440hz_1024.npy"), chroma_1024)
 
+# ── Spectral Descriptor golden files ──
+# Spectral centroid: default params
+sc_centroid = librosa.feature.spectral_centroid(y=signal_440, sr=22050)
+np.save(os.path.join(GOLDEN_DIR, "spectral_centroid_440hz_default.npy"), sc_centroid)
+
+# Spectral bandwidth: default params
+sc_bandwidth = librosa.feature.spectral_bandwidth(y=signal_440, sr=22050)
+np.save(os.path.join(GOLDEN_DIR, "spectral_bandwidth_440hz_default.npy"), sc_bandwidth)
+
+# Spectral contrast: default params
+sc_contrast = librosa.feature.spectral_contrast(y=signal_440, sr=22050)
+np.save(os.path.join(GOLDEN_DIR, "spectral_contrast_440hz_default.npy"), sc_contrast)
+
+# Spectral rolloff: default params
+sc_rolloff = librosa.feature.spectral_rolloff(y=signal_440, sr=22050)
+np.save(os.path.join(GOLDEN_DIR, "spectral_rolloff_440hz_default.npy"), sc_rolloff)
+
+# Spectral flatness: default params
+sc_flatness = librosa.feature.spectral_flatness(y=signal_440)
+np.save(os.path.join(GOLDEN_DIR, "spectral_flatness_440hz_default.npy"), sc_flatness)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -109,4 +130,9 @@ print(f"mel_spec_custom shape: {mel_spec_custom.shape}")
 print(f"mfcc_default shape: {mfcc_default.shape}, dtype: {mfcc_default.dtype}, range: [{mfcc_default.min():.4f}, {mfcc_default.max():.4f}]")
 print(f"mfcc_13_1024 shape: {mfcc_13_1024.shape}")
 print(f"mfcc_custom shape: {mfcc_custom.shape}")
+print(f"spectral_centroid shape: {sc_centroid.shape}, range: [{sc_centroid.min():.4f}, {sc_centroid.max():.4f}]")
+print(f"spectral_bandwidth shape: {sc_bandwidth.shape}, range: [{sc_bandwidth.min():.4f}, {sc_bandwidth.max():.4f}]")
+print(f"spectral_contrast shape: {sc_contrast.shape}, range: [{sc_contrast.min():.4f}, {sc_contrast.max():.4f}]")
+print(f"spectral_rolloff shape: {sc_rolloff.shape}, range: [{sc_rolloff.min():.4f}, {sc_rolloff.max():.4f}]")
+print(f"spectral_flatness shape: {sc_flatness.shape}, range: [{sc_flatness.min():.6f}, {sc_flatness.max():.6f}]")
 print(f"Golden files saved to {GOLDEN_DIR}")

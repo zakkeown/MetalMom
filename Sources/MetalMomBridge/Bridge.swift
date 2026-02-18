@@ -556,6 +556,243 @@ public func mm_chroma_stft(
     return MM_OK
 }
 
+// MARK: - Spectral Descriptors (shared helper)
+
+/// Fill an MMBuffer from a Signal result. Shared by all spectral descriptor bridge functions.
+private func fillBuffer(_ result: Signal, _ out: UnsafeMutablePointer<MMBuffer>) -> Int32 {
+    let outCount = result.count
+    guard outCount > 0 else {
+        out.pointee.data = nil
+        out.pointee.ndim = Int32(result.shape.count)
+        withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+            tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+                for i in 0..<8 { shapePtr[i] = 0 }
+                for i in 0..<min(result.shape.count, 8) {
+                    shapePtr[i] = Int64(result.shape[i])
+                }
+            }
+        }
+        out.pointee.dtype = 0
+        out.pointee.count = 0
+        return MM_OK
+    }
+
+    let outData = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
+    result.withUnsafeBufferPointer { srcBuf in
+        outData.initialize(from: srcBuf.baseAddress!, count: outCount)
+    }
+
+    out.pointee.data = outData
+    out.pointee.ndim = Int32(result.shape.count)
+    let shape = result.shape
+    withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+        tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+            for i in 0..<8 { shapePtr[i] = 0 }
+            for i in 0..<min(shape.count, 8) {
+                shapePtr[i] = Int64(shape[i])
+            }
+        }
+    }
+    out.pointee.dtype = 0  // float32
+    out.pointee.count = Int64(outCount)
+
+    return MM_OK
+}
+
+// MARK: - Spectral Centroid
+
+@_cdecl("mm_spectral_centroid")
+public func mm_spectral_centroid(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let spec = STFT.compute(signal: signal, nFFT: Int(nFFT),
+                            hopLength: hopOpt, winLength: winOpt,
+                            center: center != 0)
+    let result = SpectralDescriptors.centroid(spectrogram: spec, sr: Int(sampleRate),
+                                              nFFT: Int(nFFT))
+    return fillBuffer(result, out)
+}
+
+// MARK: - Spectral Bandwidth
+
+@_cdecl("mm_spectral_bandwidth")
+public func mm_spectral_bandwidth(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ p: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let spec = STFT.compute(signal: signal, nFFT: Int(nFFT),
+                            hopLength: hopOpt, winLength: winOpt,
+                            center: center != 0)
+    let result = SpectralDescriptors.bandwidth(spectrogram: spec, sr: Int(sampleRate),
+                                               nFFT: Int(nFFT), p: p)
+    return fillBuffer(result, out)
+}
+
+// MARK: - Spectral Contrast
+
+@_cdecl("mm_spectral_contrast")
+public func mm_spectral_contrast(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ nBands: Int32,
+    _ fMin: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let spec = STFT.compute(signal: signal, nFFT: Int(nFFT),
+                            hopLength: hopOpt, winLength: winOpt,
+                            center: center != 0)
+    let result = SpectralDescriptors.contrast(spectrogram: spec, sr: Int(sampleRate),
+                                              nFFT: Int(nFFT), nBands: Int(nBands),
+                                              fMin: fMin)
+    return fillBuffer(result, out)
+}
+
+// MARK: - Spectral Rolloff
+
+@_cdecl("mm_spectral_rolloff")
+public func mm_spectral_rolloff(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ rollPercent: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let spec = STFT.compute(signal: signal, nFFT: Int(nFFT),
+                            hopLength: hopOpt, winLength: winOpt,
+                            center: center != 0)
+    let result = SpectralDescriptors.rolloff(spectrogram: spec, sr: Int(sampleRate),
+                                             nFFT: Int(nFFT), rollPercent: rollPercent)
+    return fillBuffer(result, out)
+}
+
+// MARK: - Spectral Flatness
+
+@_cdecl("mm_spectral_flatness")
+public func mm_spectral_flatness(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let spec = STFT.compute(signal: signal, nFFT: Int(nFFT),
+                            hopLength: hopOpt, winLength: winOpt,
+                            center: center != 0)
+    let result = SpectralDescriptors.flatness(spectrogram: spec)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

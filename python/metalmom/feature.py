@@ -417,6 +417,344 @@ def _chroma_filterbank(sr, n_fft, n_chroma=12, tuning=0.0,
     return np.ascontiguousarray(wts[:, :n_freqs], dtype=np.float32)
 
 
+def spectral_centroid(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
+                      win_length=None, center=True, freq=None, **kwargs):
+    """Compute spectral centroid.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    S : np.ndarray or None
+        Pre-computed magnitude spectrogram. If provided, ``y`` is ignored.
+    n_fft : int
+        FFT window size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length. Default: ``n_fft``.
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+
+    Returns
+    -------
+    np.ndarray
+        Spectral centroid, shape ``(1, n_frames)``.
+    """
+    if S is not None:
+        S = np.ascontiguousarray(S, dtype=np.float32)
+        n_freqs = S.shape[0]
+        inferred_n_fft = (n_freqs - 1) * 2
+        freqs = np.arange(n_freqs, dtype=np.float32) * sr / inferred_n_fft
+        total = S.sum(axis=0, keepdims=True)
+        total = np.where(total > 0, total, 1.0)
+        return (freqs[:, None] * S).sum(axis=0, keepdims=True) / total
+
+    if y is None:
+        raise ValueError("Either y or S must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    hop = hop_length if hop_length is not None else 512
+    win = win_length if win_length is not None else n_fft
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+        status = lib.mm_spectral_centroid(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, hop, win,
+            1 if center else 0,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_spectral_centroid failed with status {status}")
+        result = buffer_to_numpy(out)
+        return result.reshape(1, -1)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def spectral_bandwidth(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
+                        win_length=None, center=True, freq=None, p=2, **kwargs):
+    """Compute spectral bandwidth.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    S : np.ndarray or None
+        Pre-computed magnitude spectrogram.
+    n_fft : int
+        FFT window size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length. Default: ``n_fft``.
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+    p : float
+        Power for p-th moment. Default: 2.
+
+    Returns
+    -------
+    np.ndarray
+        Spectral bandwidth, shape ``(1, n_frames)``.
+    """
+    if S is not None:
+        S = np.ascontiguousarray(S, dtype=np.float32)
+        n_freqs = S.shape[0]
+        inferred_n_fft = (n_freqs - 1) * 2
+        freqs = np.arange(n_freqs, dtype=np.float32) * sr / inferred_n_fft
+        centroid = spectral_centroid(S=S, sr=sr, n_fft=inferred_n_fft)
+        total = S.sum(axis=0, keepdims=True)
+        total = np.where(total > 0, total, 1.0)
+        deviation = np.abs(freqs[:, None] - centroid)
+        bw = ((S * deviation ** p).sum(axis=0, keepdims=True) / total) ** (1.0 / p)
+        return bw
+
+    if y is None:
+        raise ValueError("Either y or S must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    hop = hop_length if hop_length is not None else 512
+    win = win_length if win_length is not None else n_fft
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+        status = lib.mm_spectral_bandwidth(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, hop, win,
+            1 if center else 0,
+            float(p),
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_spectral_bandwidth failed with status {status}")
+        result = buffer_to_numpy(out)
+        return result.reshape(1, -1)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def spectral_contrast(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
+                       win_length=None, center=True, n_bands=6, fmin=200.0,
+                       quantile=0.02, **kwargs):
+    """Compute spectral contrast.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    S : np.ndarray or None
+        Pre-computed magnitude spectrogram.
+    n_fft : int
+        FFT window size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length. Default: ``n_fft``.
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+    n_bands : int
+        Number of octave sub-bands. Default: 6.
+    fmin : float
+        Low frequency bound. Default: 200.0.
+    quantile : float
+        Fraction for peak/valley. Default: 0.02.
+
+    Returns
+    -------
+    np.ndarray
+        Spectral contrast, shape ``(n_bands + 1, n_frames)``.
+    """
+    if S is not None:
+        raise NotImplementedError("spectral_contrast with pre-computed S not yet supported")
+
+    if y is None:
+        raise ValueError("Either y or S must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    hop = hop_length if hop_length is not None else 512
+    win = win_length if win_length is not None else n_fft
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+        status = lib.mm_spectral_contrast(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, hop, win,
+            1 if center else 0,
+            n_bands, float(fmin),
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_spectral_contrast failed with status {status}")
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
+                      win_length=None, center=True, roll_percent=0.85, **kwargs):
+    """Compute spectral rolloff frequency.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    S : np.ndarray or None
+        Pre-computed magnitude spectrogram.
+    n_fft : int
+        FFT window size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length. Default: ``n_fft``.
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+    roll_percent : float
+        Energy fraction threshold. Default: 0.85.
+
+    Returns
+    -------
+    np.ndarray
+        Spectral rolloff, shape ``(1, n_frames)``.
+    """
+    if S is not None:
+        S = np.ascontiguousarray(S, dtype=np.float32)
+        n_freqs = S.shape[0]
+        inferred_n_fft = (n_freqs - 1) * 2
+        freqs = np.arange(n_freqs, dtype=np.float32) * sr / inferred_n_fft
+        total_energy = S.sum(axis=0, keepdims=True)
+        threshold = roll_percent * total_energy
+        cumulative = np.cumsum(S, axis=0)
+        result = np.zeros((1, S.shape[1]), dtype=np.float32)
+        for f in range(S.shape[1]):
+            if total_energy[0, f] <= 0:
+                result[0, f] = 0
+            else:
+                idx = np.searchsorted(cumulative[:, f], threshold[0, f])
+                idx = min(idx, n_freqs - 1)
+                result[0, f] = freqs[idx]
+        return result
+
+    if y is None:
+        raise ValueError("Either y or S must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    hop = hop_length if hop_length is not None else 512
+    win = win_length if win_length is not None else n_fft
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+        status = lib.mm_spectral_rolloff(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, hop, win,
+            1 if center else 0,
+            float(roll_percent),
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_spectral_rolloff failed with status {status}")
+        result = buffer_to_numpy(out)
+        return result.reshape(1, -1)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def spectral_flatness(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
+                       win_length=None, center=True, power=2.0, amin=1e-10, **kwargs):
+    """Compute spectral flatness (Wiener entropy).
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    S : np.ndarray or None
+        Pre-computed magnitude spectrogram.
+    n_fft : int
+        FFT window size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length. Default: ``n_fft``.
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+    power : float
+        Exponent for magnitude spectrogram. Default: 2.0.
+    amin : float
+        Minimum amplitude. Default: 1e-10.
+
+    Returns
+    -------
+    np.ndarray
+        Spectral flatness, shape ``(1, n_frames)``.
+    """
+    if S is not None:
+        S = np.ascontiguousarray(S, dtype=np.float32)
+        S_floored = np.maximum(S, amin)
+        raw_sum = S.sum(axis=0)
+        geo_mean = np.exp(np.mean(np.log(S_floored), axis=0))
+        arith_mean = np.mean(S_floored, axis=0)
+        result = np.where(raw_sum > amin, geo_mean / arith_mean, 0.0)
+        return result.reshape(1, -1).astype(np.float32)
+
+    if y is None:
+        raise ValueError("Either y or S must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    hop = hop_length if hop_length is not None else 512
+    win = win_length if win_length is not None else n_fft
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+        status = lib.mm_spectral_flatness(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, hop, win,
+            1 if center else 0,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_spectral_flatness failed with status {status}")
+        result = buffer_to_numpy(out)
+        return result.reshape(1, -1)
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def _normalize_frames(chroma, norm=2.0):
     """Normalize each frame (column) of a chroma matrix.
 
