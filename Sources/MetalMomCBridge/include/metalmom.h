@@ -334,6 +334,13 @@ int32_t mm_chord_detect(mm_context ctx,
                          float self_transition_bias,
                          MMBuffer* out);
 
+/* Piano Transcription */
+int32_t mm_piano_transcribe(mm_context ctx,
+                             const float* activations, int32_t n_frames,
+                             float threshold, int32_t min_duration,
+                             int32_t use_hmm,
+                             MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

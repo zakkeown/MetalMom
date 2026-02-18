@@ -18,3 +18,4 @@ from .pitch import yin, pyin, piptrack, estimate_tuning
 from .effects import hpss, harmonic, percussive, time_stretch, pitch_shift, trim, split, preemphasis, deemphasis
 from .key import key_detect
 from .chord import chord_detect
+from .transcribe import piano_transcribe

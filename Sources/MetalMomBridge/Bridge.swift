@@ -2418,6 +2418,64 @@ public func mm_chord_detect(
     return fillBuffer(result, out)
 }
 
+// MARK: - Piano Transcription
+
+@_cdecl("mm_piano_transcribe")
+public func mm_piano_transcribe(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ activations: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ threshold: Float,
+    _ minDuration: Int32,
+    _ useHMM: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let activations = activations,
+          nFrames > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let totalCount = Int(nFrames) * 88
+    let actArray = Array(UnsafeBufferPointer(start: activations, count: totalCount))
+
+    let events: [PianoTranscription.NoteEvent]
+    if useHMM != 0 {
+        events = PianoTranscription.detectHMM(
+            activations: actArray,
+            nFrames: Int(nFrames),
+            onsetProb: 0.01,
+            offsetProb: 0.05,
+            minDuration: Int(minDuration)
+        )
+    } else {
+        events = PianoTranscription.detect(
+            activations: actArray,
+            nFrames: Int(nFrames),
+            threshold: threshold,
+            minDuration: Int(minDuration)
+        )
+    }
+
+    let nEvents = events.count
+    if nEvents == 0 {
+        let emptySignal = Signal(data: [], shape: [0, 4], sampleRate: 0)
+        return fillBuffer(emptySignal, out)
+    }
+
+    // Pack as [nEvents, 4] float array: (midiNote, onsetFrame, offsetFrame, velocity)
+    var flatData = [Float](repeating: 0, count: nEvents * 4)
+    for (i, event) in events.enumerated() {
+        flatData[i * 4 + 0] = Float(event.midiNote)
+        flatData[i * 4 + 1] = Float(event.onsetFrame)
+        flatData[i * 4 + 2] = Float(event.offsetFrame)
+        flatData[i * 4 + 3] = event.velocity
+    }
+
+    let result = Signal(data: flatData, shape: [nEvents, 4], sampleRate: 0)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
