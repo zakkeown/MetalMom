@@ -1,0 +1,81 @@
+name: API Parity (Weekly)
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Monday 6am UTC
+  workflow_dispatch:
+
+jobs:
+  api-drift-check:
+    name: API Drift Detection
+    runs-on: macos-14
+
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Swift ────────────────────────────────────────────────
+      - name: Build Swift package
+        run: swift build
+
+      - name: Build dylib
+        run: ./scripts/build_dylib.sh
+
+      # ── Python ───────────────────────────────────────────────
+      # Use Python 3.11 because madmom does not support 3.14+
+      # (collections.MutableSequence was removed)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          pip install numpy cffi soundfile librosa mir_eval matplotlib
+          # madmom may fail to install on some platforms; treat as optional
+          pip install madmom || echo "WARNING: madmom install failed, will skip madmom API checks"
+
+      - name: Install MetalMom Python package
+        run: pip install -e python/
+
+      # ── API drift check ──────────────────────────────────────
+      - name: Download previous baseline (if exists)
+        uses: actions/cache@v4
+        with:
+          path: api-drift-baseline.json
+          key: api-drift-baseline-${{ github.ref_name }}
+          restore-keys: |
+            api-drift-baseline-main
+            api-drift-baseline-
+
+      - name: Run API surface check
+        id: drift-check
+        run: |
+          BASELINE_ARG=""
+          if [ -f api-drift-baseline.json ]; then
+            BASELINE_ARG="--baseline api-drift-baseline.json"
+          fi
+          python scripts/ci/check_api_surface.py $BASELINE_ARG --output api-drift-report.json || echo "drift_detected=true" >> "$GITHUB_OUTPUT"
+
+      - name: Update baseline cache
+        if: always()
+        run: cp api-drift-report.json api-drift-baseline.json
+
+      # ── File issue if drift detected ─────────────────────────
+      - name: File GitHub issue for new drift
+        if: steps.drift-check.outputs.drift_detected == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci/file_api_drift_issues.py --report api-drift-report.json
+
+      # ── Upload artifact ──────────────────────────────────────
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-drift-report
+          path: api-drift-report.json
