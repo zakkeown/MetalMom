@@ -197,15 +197,32 @@ public final class InferenceEngine {
     // MARK: - Helpers
 
     /// Convert an MLMultiArray (any rank) to a flat-float Signal.
+    ///
+    /// Handles both float32 and float64 (Double) output arrays, converting
+    /// to Float if necessary.
     private func mlMultiArrayToSignal(_ array: MLMultiArray, sampleRate: Int) -> Signal {
         let shape = (0..<array.shape.count).map { array.shape[$0].intValue }
         let count = shape.reduce(1, *)
         var data = [Float](repeating: 0, count: count)
 
-        // Fast path: contiguous float32 buffer.
-        let srcPtr = array.dataPointer.assumingMemoryBound(to: Float.self)
-        data.withUnsafeMutableBufferPointer { dst in
-            dst.baseAddress!.update(from: srcPtr, count: count)
+        switch array.dataType {
+        case .float32:
+            let srcPtr = array.dataPointer.assumingMemoryBound(to: Float.self)
+            data.withUnsafeMutableBufferPointer { dst in
+                dst.baseAddress!.update(from: srcPtr, count: count)
+            }
+        case .double:
+            let srcPtr = array.dataPointer.assumingMemoryBound(to: Double.self)
+            data.withUnsafeMutableBufferPointer { dst in
+                for i in 0..<count {
+                    dst[i] = Float(srcPtr[i])
+                }
+            }
+        default:
+            // Fallback: use subscript access (slower but type-safe)
+            for i in 0..<count {
+                data[i] = array[i].floatValue
+            }
         }
 
         return Signal(data: data, shape: shape, sampleRate: sampleRate)

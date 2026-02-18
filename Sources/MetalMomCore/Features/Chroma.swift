@@ -549,35 +549,187 @@ public enum Chroma {
 
     // MARK: - Deep Chroma
 
-    /// Compute deep chroma features.
+    /// Compute deep chroma features using a pre-trained DNN, matching
+    /// madmom's `DeepChromaProcessor` pipeline.
     ///
-    /// This is a placeholder that uses CQT-based chroma as the foundation.
-    /// A full deep chroma implementation would apply a learned neural network
-    /// transformation to the CQT representation. In this version, the CQT chroma
-    /// is computed with L2 normalization as a reasonable approximation.
+    /// Pipeline:
+    /// 1. STFT with frame_size=8192, ~10 fps (hop = sampleRate / 10)
+    /// 2. Magnitude spectrogram → logarithmic filterbank (24 bands/octave, 65–2100 Hz)
+    /// 2b. Logarithmic compression: log10(x + 1)
+    /// 3. Sliding 15-frame context window (centred, zero-padded at edges)
+    /// 4. Flatten each window (nBins * 15 = ~1575 features) and feed to DNN
+    /// 5. DNN outputs 12 chroma values per frame (sigmoid, values in [0, 1])
+    ///
+    /// If the model cannot be loaded (models directory not configured or model
+    /// file missing), falls back to CQT-based chroma with L2 normalisation and
+    /// prints a warning.
     ///
     /// Returns a `Signal` with shape `[nChroma, nFrames]`, row-major.
     ///
     /// - Parameters:
     ///   - signal: Input audio signal (1D).
     ///   - sr: Sample rate override. If `nil`, uses `signal.sampleRate`.
-    ///   - hopLength: Hop length in samples. Default auto-selected.
+    ///   - hopLength: Hop length in samples. If `nil`, uses `sampleRate / 10` (~10 fps).
     ///   - nChroma: Number of chroma bins. Default 12.
+    ///   - modelsDirectory: Optional URL to directory containing the
+    ///     `chroma_dnn.mlmodel` file. If `nil`, tries `ModelRegistry.shared`.
     /// - Returns: Deep chroma `Signal` with shape `[nChroma, nFrames]`.
     public static func deep(
         signal: Signal,
         sr: Int? = nil,
         hopLength: Int? = nil,
-        nChroma: Int = 12
+        nChroma: Int = 12,
+        modelsDirectory: URL? = nil
     ) -> Signal {
-        // Placeholder: use CQT chroma with L2 normalization
-        return cqt(
+        let sampleRate = sr ?? signal.sampleRate
+
+        // Try to load the DNN; fall back to CQT approximation on failure.
+        let engine: InferenceEngine
+        do {
+            engine = try loadChromaDNN(modelsDirectory: modelsDirectory)
+        } catch {
+            print("MetalMom: deep chroma DNN not available (\(error)), falling back to CQT approximation")
+            return cqt(
+                signal: signal,
+                sr: sampleRate,
+                hopLength: hopLength,
+                nChroma: nChroma,
+                norm: 2.0
+            )
+        }
+
+        // 1. STFT with frame_size=8192, ~10 fps
+        let nFFT = 8192
+        let hop = hopLength ?? (sampleRate / 10)  // ~10 fps
+
+        let stftMag = STFT.compute(
             signal: signal,
-            sr: sr,
-            hopLength: hopLength,
-            nChroma: nChroma,
-            norm: 2.0
+            nFFT: nFFT,
+            hopLength: hop,
+            center: true
         )
+
+        let nFreqs = stftMag.shape[0]
+        let nFrames = stftMag.shape[1]
+
+        guard nFrames > 0 else {
+            return Signal(data: [], shape: [nChroma, 0], sampleRate: sampleRate)
+        }
+
+        // 2. Apply logarithmic filterbank (24 bands/octave, 65-2100 Hz)
+        let filterbank = FilterBank.logarithmic(
+            nFFT: nFFT,
+            sampleRate: sampleRate,
+            numBandsPerOctave: 24,
+            fMin: 65.0,
+            fMax: 2100.0
+        )
+
+        let nBins = filterbank.shape[0]  // ~105
+
+        // Matrix multiply: filterbank [nBins, nFreqs] @ stftMag [nFreqs, nFrames] = [nBins, nFrames]
+        let filteredCount = nBins * nFrames
+        let filteredPtr = UnsafeMutablePointer<Float>.allocate(capacity: filteredCount)
+        filteredPtr.initialize(repeating: 0, count: filteredCount)
+        defer { filteredPtr.deallocate() }
+
+        filterbank.withUnsafeBufferPointer { fbBuf in
+            stftMag.withUnsafeBufferPointer { stftBuf in
+                vDSP_mmul(
+                    fbBuf.baseAddress!, 1,      // A: filterbank [nBins x nFreqs]
+                    stftBuf.baseAddress!, 1,    // B: stftMag [nFreqs x nFrames]
+                    filteredPtr, 1,             // C: output [nBins x nFrames]
+                    vDSP_Length(nBins),
+                    vDSP_Length(nFrames),
+                    vDSP_Length(nFreqs)
+                )
+            }
+        }
+
+        // 2b. Logarithmic compression: log10(x + 1), matching madmom's default
+        for i in 0..<filteredCount {
+            filteredPtr[i] = log10f(filteredPtr[i] + 1.0)
+        }
+
+        // 3. Slide 15-frame context windows (centred) and run DNN
+        let contextSize = 15
+        let halfContext = contextSize / 2  // 7
+        let inputSize = nBins * contextSize  // ~1575
+
+        // Allocate output: [nChroma, nFrames] row-major
+        let outCount = nChroma * nFrames
+        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
+        outPtr.initialize(repeating: 0, count: outCount)
+
+        // Pre-allocate a reusable input window buffer
+        var windowBuffer = [Float](repeating: 0, count: inputSize)
+
+        for t in 0..<nFrames {
+            // Build the flattened context window for frame t
+            for ctx in 0..<contextSize {
+                let srcFrame = t - halfContext + ctx
+                if srcFrame >= 0 && srcFrame < nFrames {
+                    // Copy column srcFrame from the filtered spectrogram
+                    for b in 0..<nBins {
+                        windowBuffer[ctx * nBins + b] = filteredPtr[b * nFrames + srcFrame]
+                    }
+                } else {
+                    // Zero-pad edges
+                    for b in 0..<nBins {
+                        windowBuffer[ctx * nBins + b] = 0
+                    }
+                }
+            }
+
+            // 4. Run DNN inference for this frame
+            do {
+                let inputSignal = Signal(data: windowBuffer, shape: [inputSize], sampleRate: sampleRate)
+                let output = try engine.predict(input: inputSignal)
+
+                // Copy the 12 chroma values into the output matrix (column t)
+                output.withUnsafeBufferPointer { outBuf in
+                    let chromaCount = min(nChroma, outBuf.count)
+                    for c in 0..<chromaCount {
+                        outPtr[c * nFrames + t] = outBuf[c]
+                    }
+                }
+            } catch {
+                // If inference fails for a frame, leave zeros (already initialised)
+                print("MetalMom: deep chroma DNN inference failed at frame \(t): \(error)")
+            }
+        }
+
+        let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: outCount)
+        return Signal(taking: outBuffer, shape: [nChroma, nFrames], sampleRate: sampleRate)
+    }
+
+    /// Attempt to load the chroma DNN model.
+    ///
+    /// Tries the following in order:
+    /// 1. Load from the provided `modelsDirectory` (uncompiled `.mlmodel`)
+    /// 2. Load from `ModelRegistry.shared` (compiled `.mlmodelc`)
+    ///
+    /// - Parameter modelsDirectory: Optional directory containing `chroma_dnn.mlmodel`.
+    /// - Returns: A ready-to-use `InferenceEngine`.
+    /// - Throws: If the model cannot be found or loaded.
+    private static func loadChromaDNN(modelsDirectory: URL?) throws -> InferenceEngine {
+        // 1. Try explicit modelsDirectory with .mlmodel
+        if let dir = modelsDirectory {
+            let mlmodelURL = dir.appendingPathComponent("chroma_dnn.mlmodel")
+            if FileManager.default.fileExists(atPath: mlmodelURL.path) {
+                return try InferenceEngine(sourceModelURL: mlmodelURL)
+            }
+            // Also try compiled .mlmodelc
+            let mlmodelcURL = dir.appendingPathComponent("chroma_dnn.mlmodelc")
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: mlmodelcURL.path, isDirectory: &isDir),
+               isDir.boolValue {
+                return try InferenceEngine(compiledModelURL: mlmodelcURL)
+            }
+        }
+
+        // 2. Try ModelRegistry (may have been configured elsewhere)
+        return try ModelRegistry.shared.model(named: "chroma_dnn")
     }
 
     // MARK: - Private Helpers

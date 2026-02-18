@@ -218,4 +218,185 @@ final class ChromaTests: XCTestCase {
         XCTAssertEqual(result.shape[0], 12)
         XCTAssertGreaterThan(result.shape[1], 0)
     }
+
+    // MARK: - Logarithmic Filterbank Tests
+
+    func testLogarithmicFilterbankShape() {
+        // With nFFT=8192, sr=44100, 24 bands/octave, fmin=65, fmax=2100:
+        // madmom's algorithm produces ~105 unique bins after deduplication.
+        let fb = FilterBank.logarithmic(nFFT: 8192, sampleRate: 44100)
+        XCTAssertEqual(fb.shape.count, 2, "Log filterbank should be 2D")
+        XCTAssertEqual(fb.shape[1], 8192 / 2 + 1, "Should have nFFT/2+1 frequency bins")
+        // The exact count depends on FFT resolution and deduplication; should be ~105
+        XCTAssertGreaterThanOrEqual(fb.shape[0], 90, "Should have at least 90 bins")
+        XCTAssertLessThanOrEqual(fb.shape[0], 120, "Should have at most 120 bins")
+    }
+
+    func testLogarithmicFilterbankValuesNonNegative() {
+        let fb = FilterBank.logarithmic(nFFT: 8192, sampleRate: 44100)
+        for i in 0..<fb.count {
+            XCTAssertGreaterThanOrEqual(fb[i], 0.0,
+                                        "Log filterbank values should be non-negative")
+        }
+    }
+
+    func testLogarithmicFilterbankRowsNonZero() {
+        let fb = FilterBank.logarithmic(nFFT: 8192, sampleRate: 44100)
+        let nBins = fb.shape[0]
+        let nFreqs = fb.shape[1]
+
+        for b in 0..<nBins {
+            var rowSum: Float = 0
+            for k in 0..<nFreqs {
+                rowSum += fb[b * nFreqs + k]
+            }
+            XCTAssertGreaterThan(rowSum, 0, "Filter band \(b) should have non-zero weights")
+        }
+    }
+
+    func testLogarithmicFilterbankProduces105BinsForDeepChroma() {
+        // The deep chroma DNN expects exactly 105 * 15 = 1575 input features.
+        // This means the filterbank must produce exactly 105 bins with the
+        // standard deep chroma parameters (nFFT=8192, sr=44100, 24 bands/oct, 65-2100 Hz).
+        let fb = FilterBank.logarithmic(nFFT: 8192, sampleRate: 44100)
+        XCTAssertEqual(fb.shape[0], 105,
+                       "Deep chroma filterbank should produce exactly 105 bins, got \(fb.shape[0])")
+    }
+
+    // MARK: - Deep Chroma Tests
+
+    /// Resolve the models/converted/chroma directory via #filePath.
+    private static var chromaModelDir: URL? {
+        // #filePath → .../Tests/MetalMomTests/ChromaTests.swift
+        let thisFile = URL(fileURLWithPath: #filePath)
+        let projectRoot = thisFile
+            .deletingLastPathComponent()   // MetalMomTests/
+            .deletingLastPathComponent()   // Tests/
+            .deletingLastPathComponent()   // project root
+        let modelDir = projectRoot.appendingPathComponent("models/converted/chroma")
+        let modelFile = modelDir.appendingPathComponent("chroma_dnn.mlmodel")
+        guard FileManager.default.fileExists(atPath: modelFile.path) else {
+            return nil
+        }
+        return modelDir
+    }
+
+    func testDeepChromaFallbackShape() {
+        // Without a model, deep() should fall back to CQT and still return correct shape.
+        let signal = makeSineSignal(frequency: 440.0, sr: 44100, duration: 1.0)
+        let result = Chroma.deep(signal: signal, sr: 44100)
+
+        XCTAssertEqual(result.shape.count, 2, "Deep chroma should be 2D")
+        XCTAssertEqual(result.shape[0], 12, "Should have 12 chroma bins")
+        XCTAssertGreaterThan(result.shape[1], 0, "Should have at least 1 frame")
+    }
+
+    func testDeepChromaFallbackValuesFinite() {
+        let signal = makeSineSignal(frequency: 440.0, sr: 44100, duration: 1.0)
+        let result = Chroma.deep(signal: signal, sr: 44100)
+
+        for i in 0..<result.count {
+            XCTAssertFalse(result[i].isNaN, "Deep chroma value at \(i) should not be NaN")
+            XCTAssertFalse(result[i].isInfinite, "Deep chroma value at \(i) should not be infinite")
+        }
+    }
+
+    func testDeepChromaDNNOutputShape() throws {
+        guard let modelDir = Self.chromaModelDir else {
+            throw XCTSkip("chroma_dnn.mlmodel not found — skipping DNN test")
+        }
+
+        let signal = makeSineSignal(frequency: 440.0, sr: 44100, duration: 1.0)
+        let result = Chroma.deep(
+            signal: signal,
+            sr: 44100,
+            modelsDirectory: modelDir
+        )
+
+        XCTAssertEqual(result.shape.count, 2, "Deep chroma should be 2D")
+        XCTAssertEqual(result.shape[0], 12, "Should have 12 chroma bins")
+        XCTAssertGreaterThan(result.shape[1], 0, "Should have at least 1 frame")
+
+        // ~10 fps for 1 second => expect roughly 10 frames (with center padding)
+        let expectedFrames = result.shape[1]
+        XCTAssertGreaterThanOrEqual(expectedFrames, 8, "Should have roughly 10 frames for 1s at 10fps")
+        XCTAssertLessThanOrEqual(expectedFrames, 15, "Should not have far more than 10 frames for 1s")
+    }
+
+    func testDeepChromaDNNValuesInRange() throws {
+        guard let modelDir = Self.chromaModelDir else {
+            throw XCTSkip("chroma_dnn.mlmodel not found — skipping DNN test")
+        }
+
+        // First, verify the raw model works with a known input
+        let modelURL = modelDir.appendingPathComponent("chroma_dnn.mlmodel")
+        let engine = try InferenceEngine(sourceModelURL: modelURL)
+        let testInput = Signal(data: [Float](repeating: 0.0, count: 1575),
+                               shape: [1575], sampleRate: 44100)
+        let testOutput = try engine.predict(input: testInput)
+        XCTAssertEqual(testOutput.count, 12, "Model should output 12 values")
+        testOutput.withUnsafeBufferPointer { buf in
+            for i in 0..<12 {
+                XCTAssertGreaterThanOrEqual(buf[i], 0.0,
+                    "Sigmoid output should be >= 0, got \(buf[i]) at index \(i)")
+                XCTAssertLessThanOrEqual(buf[i], 1.0,
+                    "Sigmoid output should be <= 1, got \(buf[i]) at index \(i)")
+            }
+        }
+
+        // Now test the full pipeline
+        let signal = makeSineSignal(frequency: 440.0, sr: 44100, duration: 1.0)
+        let result = Chroma.deep(
+            signal: signal,
+            sr: 44100,
+            modelsDirectory: modelDir
+        )
+
+        for i in 0..<result.count {
+            XCTAssertFalse(result[i].isNaN, "DNN chroma value at \(i) should not be NaN")
+            XCTAssertFalse(result[i].isInfinite, "DNN chroma value at \(i) should not be infinite")
+            // DNN output (sigmoid final layer) should be in [0, 1]
+            XCTAssertGreaterThanOrEqual(result[i], -0.01,
+                "DNN chroma value at \(i) should be >= -0.01, got \(result[i])")
+            XCTAssertLessThanOrEqual(result[i], 1.01,
+                "DNN chroma value at \(i) should be <= 1.01, got \(result[i])")
+        }
+    }
+
+    func testDeepChromaDNNDiffersFromCQT() throws {
+        guard let modelDir = Self.chromaModelDir else {
+            throw XCTSkip("chroma_dnn.mlmodel not found — skipping DNN test")
+        }
+
+        let signal = makeSineSignal(frequency: 440.0, sr: 44100, duration: 1.0)
+
+        // DNN deep chroma
+        let dnnResult = Chroma.deep(
+            signal: signal,
+            sr: 44100,
+            modelsDirectory: modelDir
+        )
+
+        // CQT fallback (no model dir → falls back)
+        let cqtResult = Chroma.deep(
+            signal: signal,
+            sr: 44100
+        )
+
+        // They should differ — either in shape or values.
+        // Shape may differ because the DNN pipeline uses different STFT params.
+        let shapesMatch = dnnResult.shape == cqtResult.shape
+
+        if shapesMatch {
+            // If shapes happen to match, values must differ
+            var sumDiff: Float = 0
+            let count = min(dnnResult.count, cqtResult.count)
+            for i in 0..<count {
+                sumDiff += abs(dnnResult[i] - cqtResult[i])
+            }
+            XCTAssertGreaterThan(sumDiff, 0.01,
+                "DNN deep chroma should produce different values than CQT fallback")
+        }
+        // If shapes don't match, that already proves the DNN is running a different pipeline.
+    }
 }
