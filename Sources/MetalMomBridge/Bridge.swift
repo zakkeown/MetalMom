@@ -865,6 +865,103 @@ public func mm_zero_crossing_rate(
     return fillBuffer(result, out)
 }
 
+// MARK: - Tonnetz
+
+@_cdecl("mm_tonnetz")
+public func mm_tonnetz(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ nChroma: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    // Copy input data into a Signal
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    // hopLength <= 0 means use default (nFFT/4)
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    // winLength <= 0 means use default (nFFT)
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let result = Tonnetz.compute(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        nChroma: Int(nChroma),
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - Delta Features
+
+@_cdecl("mm_delta")
+public func mm_delta(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ nFeatures: Int32,
+    _ nFrames: Int32,
+    _ width: Int32,
+    _ order: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, shape: [Int(nFeatures), Int(nFrames)], sampleRate: 0)
+
+    let result = Delta.compute(data: signal, width: Int(width), order: Int(order))
+    return fillBuffer(result, out)
+}
+
+// MARK: - Stack Memory
+
+@_cdecl("mm_stack_memory")
+public func mm_stack_memory(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ nFeatures: Int32,
+    _ nFrames: Int32,
+    _ nSteps: Int32,
+    _ delay: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, shape: [Int(nFeatures), Int(nFrames)], sampleRate: 0)
+
+    let result = Delta.stackMemory(data: signal, nSteps: Int(nSteps), delay: Int(delay))
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

@@ -858,6 +858,103 @@ def zero_crossing_rate(y, frame_length=2048, hop_length=512, center=True, **kwar
         lib.mm_destroy(ctx)
 
 
+def tonnetz(y=None, sr=22050, chroma=None, n_fft=2048, hop_length=None,
+            win_length=None, n_chroma=12, center=True, **kwargs):
+    """Compute tonnetz (tonal centroid) features.
+
+    Tonnetz features are 6-dimensional representations of tonal content
+    based on projections of chroma features onto harmonic interval circles
+    (fifths, minor thirds, major thirds) on the Tonnetz lattice.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).  Ignored if ``chroma``
+        is provided.
+    sr : int
+        Sample rate of ``y``.  Default: 22050.
+    chroma : np.ndarray or None
+        Pre-computed chroma features, shape ``(n_chroma, n_frames)``.
+        If provided, ``y`` is ignored and tonnetz is computed from this
+        chroma directly.
+    n_fft : int
+        FFT window size.  Default: 2048.
+    hop_length : int or None
+        Hop length.  Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length.  Default: ``n_fft``.
+    n_chroma : int
+        Number of chroma bins.  Default: 12.
+    center : bool
+        Centre-pad signal before STFT.  Default: True.
+
+    Returns
+    -------
+    np.ndarray
+        Tonnetz features, shape ``(6, n_frames)``.
+    """
+    if chroma is not None:
+        # Pre-computed chroma path: compute tonnetz in Python
+        chroma = np.ascontiguousarray(chroma, dtype=np.float32)
+        n_c = chroma.shape[0]
+
+        # L1-normalize per frame
+        col_sums = np.sum(np.abs(chroma), axis=0, keepdims=True)
+        col_sums = np.where(col_sums > 1e-10, col_sums, 1.0)
+        chroma_norm = chroma / col_sums
+
+        # Angular basis vectors (matches librosa exactly)
+        # Even dims are sin, odd dims are cos
+        r1, r2, r3 = 1.0, 1.0, 0.5
+        c_idx = np.arange(n_c, dtype=np.float64)
+        phi1 = c_idx * 7.0 * np.pi / 6.0   # fifths
+        phi2 = c_idx * 3.0 * np.pi / 2.0   # minor thirds
+        phi3 = c_idx * 2.0 * np.pi / 3.0   # major thirds
+
+        basis = np.array([
+            r1 * np.sin(phi1),
+            r1 * np.cos(phi1),
+            r2 * np.sin(phi2),
+            r2 * np.cos(phi2),
+            r3 * np.sin(phi3),
+            r3 * np.cos(phi3),
+        ], dtype=np.float32)  # shape (6, n_chroma)
+
+        return (basis @ chroma_norm).astype(np.float32)
+
+    if y is None:
+        raise ValueError("Either y or chroma must be provided")
+
+    # Native path: compute tonnetz entirely in Swift/Accelerate
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    # Match librosa convention: default hop_length=512 (NOT n_fft//4)
+    hop = hop_length if hop_length is not None else 512
+    win = win_length if win_length is not None else n_fft
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_tonnetz(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, hop, win,
+            n_chroma,
+            1 if center else 0,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_tonnetz failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def _normalize_frames(chroma, norm=2.0):
     """Normalize each frame (column) of a chroma matrix.
 
@@ -886,3 +983,97 @@ def _normalize_frames(chroma, norm=2.0):
         if n > 1e-10:
             chroma[:, f] /= n
     return chroma
+
+
+def delta(data, width=9, order=1, axis=-1, **kwargs):
+    """Compute delta (derivative) features.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Feature matrix, shape (n_features, n_frames).
+    width : int
+        Half-width of the Savitzky-Golay filter window. Default: 9.
+    order : int
+        Order of the derivative (1=delta, 2=delta-delta). Default: 1.
+    axis : int
+        Axis along which to compute delta. Default: -1 (last axis, i.e., time).
+
+    Returns
+    -------
+    np.ndarray
+        Delta features, same shape as input.
+    """
+    data = np.ascontiguousarray(data, dtype=np.float32)
+    if data.ndim == 1:
+        data = data.reshape(1, -1)
+
+    n_features, n_frames = data.shape
+    flat = data.ravel()
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        data_ptr = ffi.cast("const float*", flat.ctypes.data)
+
+        status = lib.mm_delta(
+            ctx, data_ptr, len(flat),
+            n_features, n_frames,
+            width, order,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_delta failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def stack_memory(data, n_steps=2, delay=1, **kwargs):
+    """Stack consecutive frames of a feature matrix.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Feature matrix, shape (n_features, n_frames).
+    n_steps : int
+        Number of time steps to stack. Default: 2.
+    delay : int
+        Number of frames to delay per step. Default: 1.
+
+    Returns
+    -------
+    np.ndarray
+        Stacked features, shape (n_features * n_steps, n_frames).
+    """
+    data = np.ascontiguousarray(data, dtype=np.float32)
+    if data.ndim == 1:
+        data = data.reshape(1, -1)
+
+    n_features, n_frames = data.shape
+    flat = data.ravel()
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        data_ptr = ffi.cast("const float*", flat.ctypes.data)
+
+        status = lib.mm_stack_memory(
+            ctx, data_ptr, len(flat),
+            n_features, n_frames,
+            n_steps, delay,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_stack_memory failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)

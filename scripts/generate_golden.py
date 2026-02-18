@@ -124,6 +124,29 @@ np.save(os.path.join(GOLDEN_DIR, "rms_440hz_default.npy"), rms_default)
 zcr_default = librosa.feature.zero_crossing_rate(y=signal_440)
 np.save(os.path.join(GOLDEN_DIR, "zcr_440hz_default.npy"), zcr_default)
 
+# ── Tonnetz golden files ──
+# Generate with chroma_stft for fair comparison (we use chroma_stft, not chroma_cqt)
+chroma_for_tonnetz = librosa.feature.chroma_stft(y=signal_440, sr=22050)
+tonnetz_default = librosa.feature.tonnetz(chroma=chroma_for_tonnetz)
+np.save(os.path.join(GOLDEN_DIR, "tonnetz_440hz_default.npy"), tonnetz_default)
+
+# ── Delta features golden files ──
+# First, compute MFCC for delta input
+mfcc_for_delta = librosa.feature.mfcc(y=signal_440, sr=22050, n_mfcc=20)
+np.save(os.path.join(GOLDEN_DIR, "mfcc.npy"), mfcc_for_delta)
+
+# Delta (first derivative) of MFCC
+delta_default = librosa.feature.delta(mfcc_for_delta)
+np.save(os.path.join(GOLDEN_DIR, "delta.npy"), delta_default)
+
+# Delta-delta (second derivative) of MFCC
+delta_delta = librosa.feature.delta(mfcc_for_delta, order=2)
+np.save(os.path.join(GOLDEN_DIR, "delta_delta.npy"), delta_delta)
+
+# Stack memory of MFCC
+stack_mem = librosa.feature.stack_memory(mfcc_for_delta, n_steps=3)
+np.save(os.path.join(GOLDEN_DIR, "stack_memory.npy"), stack_mem)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -147,4 +170,9 @@ print(f"spectral_rolloff shape: {sc_rolloff.shape}, range: [{sc_rolloff.min():.4
 print(f"spectral_flatness shape: {sc_flatness.shape}, range: [{sc_flatness.min():.6f}, {sc_flatness.max():.6f}]")
 print(f"rms_default shape: {rms_default.shape}, range: [{rms_default.min():.6f}, {rms_default.max():.6f}]")
 print(f"zcr_default shape: {zcr_default.shape}, range: [{zcr_default.min():.6f}, {zcr_default.max():.6f}]")
+print(f"tonnetz_default shape: {tonnetz_default.shape}, range: [{tonnetz_default.min():.6f}, {tonnetz_default.max():.6f}]")
+print(f"mfcc_for_delta shape: {mfcc_for_delta.shape}, range: [{mfcc_for_delta.min():.4f}, {mfcc_for_delta.max():.4f}]")
+print(f"delta_default shape: {delta_default.shape}, range: [{delta_default.min():.6f}, {delta_default.max():.6f}]")
+print(f"delta_delta shape: {delta_delta.shape}, range: [{delta_delta.min():.6f}, {delta_delta.max():.6f}]")
+print(f"stack_mem shape: {stack_mem.shape}")
 print(f"Golden files saved to {GOLDEN_DIR}")

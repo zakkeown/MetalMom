@@ -98,6 +98,22 @@ int32_t mm_zero_crossing_rate(mm_context ctx, const float* signal_data, int64_t 
                               int32_t sample_rate, int32_t frame_length, int32_t hop_length,
                               int32_t center, MMBuffer* out);
 
+/* Tonnetz */
+int32_t mm_tonnetz(mm_context ctx, const float* signal_data, int64_t signal_length,
+                   int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                   int32_t win_length, int32_t n_chroma, int32_t center,
+                   MMBuffer* out);
+
+/* Delta Features */
+int32_t mm_delta(mm_context ctx, const float* data, int64_t count,
+                 int32_t n_features, int32_t n_frames,
+                 int32_t width, int32_t order, MMBuffer* out);
+
+/* Stack Memory */
+int32_t mm_stack_memory(mm_context ctx, const float* data, int64_t count,
+                        int32_t n_features, int32_t n_frames,
+                        int32_t n_steps, int32_t delay, MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 
