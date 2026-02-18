@@ -1,0 +1,53 @@
+{
+  "layers" : [
+    {
+      "bottom" : "input",
+      "weights" : {
+
+      },
+      "debug_info" : "output",
+      "top" : "output",
+      "type" : "copy",
+      "name" : "output",
+      "attributes" : {
+        "basic_block_head" : 1,
+        "is_output" : 1
+      }
+    }
+  ],
+  "storage" : "model.espresso.weights",
+  "metadata_in_weights" : [
+
+  ],
+  "analyses" : {
+
+  },
+  "properties" : {
+
+  },
+  "format_version" : 300,
+  "shape" : {
+    "layer_shapes" : {
+      "input" : {
+        "k" : 1,
+        "w" : 4,
+        "n" : 1,
+        "_rank" : 2,
+        "h" : 1
+      },
+      "output" : {
+        "k" : 1,
+        "w" : 4,
+        "n" : 1,
+        "_rank" : 2,
+        "h" : 1
+      }
+    },
+    "global_shapes" : {
+
+    }
+  },
+  "subnetworks" : {
+
+  }
+}
