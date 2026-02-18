@@ -3114,6 +3114,84 @@ public func mm_nn_filter(
     return fillBuffer(result, out)
 }
 
+// MARK: - Recurrence Matrix
+
+@_cdecl("mm_recurrence_matrix")
+public func mm_recurrence_matrix(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ nFeatures: Int32,
+    _ nFrames: Int32,
+    _ mode: Int32,          // 0=knn, 1=threshold, 2=soft
+    _ modeParam: Float,     // k (as float) for knn, threshold value for threshold, ignored for soft
+    _ metricType: Int32,    // 0=euclidean, 1=cosine
+    _ symmetric: Int32,     // 0=false, 1=true
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, shape: [Int(nFeatures), Int(nFrames)], sampleRate: 0)
+
+    let recMode: Recurrence.Mode
+    switch mode {
+    case 1:
+        recMode = .threshold(modeParam)
+    case 2:
+        recMode = .soft
+    default:
+        recMode = .knn(k: Int(modeParam))
+    }
+
+    let metric: Recurrence.Metric = metricType == 1 ? .cosine : .euclidean
+
+    let result = Recurrence.recurrenceMatrix(
+        signal,
+        mode: recMode,
+        metric: metric,
+        symmetric: symmetric != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
+@_cdecl("mm_cross_similarity")
+public func mm_cross_similarity(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ dataA: UnsafePointer<Float>?,
+    _ countA: Int64,
+    _ dataB: UnsafePointer<Float>?,
+    _ countB: Int64,
+    _ nFeatures: Int32,
+    _ nFramesA: Int32,
+    _ nFramesB: Int32,
+    _ metricType: Int32,    // 0=euclidean, 1=cosine
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let dataA = dataA, countA > 0,
+          let dataB = dataB, countB > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let lengthA = Int(countA)
+    let lengthB = Int(countB)
+    let arrayA = Array(UnsafeBufferPointer(start: dataA, count: lengthA))
+    let arrayB = Array(UnsafeBufferPointer(start: dataB, count: lengthB))
+    let signalA = Signal(data: arrayA, shape: [Int(nFeatures), Int(nFramesA)], sampleRate: 0)
+    let signalB = Signal(data: arrayB, shape: [Int(nFeatures), Int(nFramesB)], sampleRate: 0)
+
+    let metric: Recurrence.Metric = metricType == 1 ? .cosine : .euclidean
+
+    let result = Recurrence.crossSimilarity(signalA, signalB, metric: metric)
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

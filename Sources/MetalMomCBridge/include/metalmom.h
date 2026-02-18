@@ -421,6 +421,19 @@ int32_t mm_nn_filter(mm_context ctx, const float* data, int32_t n_features, int3
                      int32_t sample_rate, int32_t k, int32_t metric, int32_t aggregate,
                      int32_t exclude_self, MMBuffer* out);
 
+/* Recurrence Matrix */
+int32_t mm_recurrence_matrix(mm_context ctx, const float* data, int64_t count,
+                              int32_t n_features, int32_t n_frames,
+                              int32_t mode, float mode_param,
+                              int32_t metric, int32_t symmetric,
+                              MMBuffer* out);
+
+/* Cross-Similarity Matrix */
+int32_t mm_cross_similarity(mm_context ctx, const float* data_a, int64_t count_a,
+                             const float* data_b, int64_t count_b,
+                             int32_t n_features, int32_t n_frames_a, int32_t n_frames_b,
+                             int32_t metric, MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 
