@@ -985,6 +985,70 @@ def _normalize_frames(chroma, norm=2.0):
     return chroma
 
 
+def tempo(y=None, sr=22050, onset_envelope=None, hop_length=512,
+          n_fft=2048, n_mels=128, fmin=0.0, fmax=None,
+          start_bpm=120.0, center=True, **kwargs):
+    """Estimate tempo (beats per minute).
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    onset_envelope : np.ndarray or None
+        Pre-computed onset strength envelope (not used by native backend;
+        accepted for API compatibility but ignored -- the native code
+        computes its own envelope from ``y``).
+    hop_length : int
+        Hop length. Default: 512.
+    n_fft : int
+        FFT window size. Default: 2048.
+    n_mels : int
+        Number of mel bands. Default: 128.
+    fmin : float
+        Minimum frequency. Default: 0.0.
+    fmax : float or None
+        Maximum frequency. Default: None (sr/2).
+    start_bpm : float
+        Initial tempo estimate (BPM). Default: 120.0.
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+
+    Returns
+    -------
+    np.ndarray
+        Array of estimated tempos (single element).
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_fmax = float(fmax) if fmax is not None else 0.0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out_tempo = ffi.new("float*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_tempo(
+            ctx, signal_ptr, len(y),
+            sr, hop_length, n_fft,
+            n_mels, fmin, c_fmax,
+            start_bpm, 1 if center else 0,
+            out_tempo,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_tempo failed with status {status}")
+
+        return np.array([float(out_tempo[0])], dtype=np.float64)
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def poly_features(S=None, y=None, sr=22050, n_fft=2048, hop_length=None,
                    win_length=None, center=True, order=1, **kwargs):
     """Compute polynomial features from a spectrogram.

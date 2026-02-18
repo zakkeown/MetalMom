@@ -9,6 +9,7 @@ from .feature import (
     spectral_rolloff, spectral_flatness,
     rms, zero_crossing_rate, tonnetz,
     delta, stack_memory, poly_features,
+    tempo,
 )
 from .evaluate import onset_evaluate, beat_evaluate, tempo_evaluate, chord_accuracy
 from .onset import onset_strength, onset_detect

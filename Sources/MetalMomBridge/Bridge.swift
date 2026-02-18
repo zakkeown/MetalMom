@@ -1395,6 +1395,52 @@ public func mm_onset_detect(
     return fillBuffer(result, out)
 }
 
+// MARK: - Tempo Estimation
+
+@_cdecl("mm_tempo")
+public func mm_tempo(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ nFFT: Int32,
+    _ nMels: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ startBPM: Float,
+    _ center: Int32,
+    _ outTempo: UnsafeMutablePointer<Float>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let outTempo = outTempo else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+
+    let tempo = TempoEstimation.tempo(
+        signal: signal,
+        sr: Int(sampleRate),
+        hopLength: hopOpt,
+        nFFT: Int(nFFT),
+        nMels: Int(nMels),
+        fmin: fMin,
+        fmax: fMaxOpt,
+        startBPM: startBPM,
+        center: center != 0
+    )
+
+    outTempo.pointee = tempo
+    return MM_OK
+}
+
 // MARK: - Beat Tracking
 
 @_cdecl("mm_beat_track")
