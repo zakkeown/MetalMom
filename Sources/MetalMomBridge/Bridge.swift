@@ -3363,6 +3363,119 @@ public func mm_viterbi_discriminative(
     return fillBuffer(pathSignal, out)
 }
 
+// MARK: - Unit Conversions
+
+@_cdecl("mm_hz_to_midi")
+public func mm_hz_to_midi(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let result = Units.hzToMidi(inputArray)
+    let signal = Signal(data: result, shape: [length], sampleRate: 0)
+    return fillBuffer(signal, out)
+}
+
+@_cdecl("mm_midi_to_hz")
+public func mm_midi_to_hz(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let result = Units.midiToHz(inputArray)
+    let signal = Signal(data: result, shape: [length], sampleRate: 0)
+    return fillBuffer(signal, out)
+}
+
+@_cdecl("mm_times_to_frames")
+public func mm_times_to_frames(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ sr: Int32,
+    _ hopLength: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let frames = Units.timesToFrames(inputArray, sr: Int(sr), hopLength: Int(hopLength))
+    let result = frames.map { Float($0) }
+    let signal = Signal(data: result, shape: [length], sampleRate: 0)
+    return fillBuffer(signal, out)
+}
+
+@_cdecl("mm_frames_to_time")
+public func mm_frames_to_time(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ sr: Int32,
+    _ hopLength: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let frames = inputArray.map { Int($0) }
+    let result = Units.framesToTime(frames, sr: Int(sr), hopLength: Int(hopLength))
+    let signal = Signal(data: result, shape: [length], sampleRate: 0)
+    return fillBuffer(signal, out)
+}
+
+@_cdecl("mm_fft_frequencies")
+public func mm_fft_frequencies(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ sr: Int32,
+    _ nFFT: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard sr > 0, nFFT > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let result = Units.fftFrequencies(sr: Int(sr), nFFT: Int(nFFT))
+    let signal = Signal(data: result, shape: [result.count], sampleRate: 0)
+    return fillBuffer(signal, out)
+}
+
+@_cdecl("mm_mel_frequencies")
+public func mm_mel_frequencies(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ nMels: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard nMels > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let result = Units.melFrequencies(nMels: Int(nMels), fMin: fMin, fMax: fMax)
+    let signal = Signal(data: result, shape: [result.count], sampleRate: 0)
+    return fillBuffer(signal, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

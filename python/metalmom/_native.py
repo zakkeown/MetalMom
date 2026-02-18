@@ -461,6 +461,16 @@ ffi.cdef("""
                                        const float* pairwise_data,
                                        MMBuffer* out);
 
+    /* Unit Conversions */
+    int32_t mm_hz_to_midi(mm_context ctx, const float* data, int64_t count, MMBuffer* out);
+    int32_t mm_midi_to_hz(mm_context ctx, const float* data, int64_t count, MMBuffer* out);
+    int32_t mm_times_to_frames(mm_context ctx, const float* data, int64_t count,
+                                int32_t sr, int32_t hop_length, MMBuffer* out);
+    int32_t mm_frames_to_time(mm_context ctx, const float* data, int64_t count,
+                               int32_t sr, int32_t hop_length, MMBuffer* out);
+    int32_t mm_fft_frequencies(mm_context ctx, int32_t sr, int32_t n_fft, MMBuffer* out);
+    int32_t mm_mel_frequencies(mm_context ctx, int32_t n_mels, float f_min, float f_max, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

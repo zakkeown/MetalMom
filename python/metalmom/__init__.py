@@ -25,3 +25,9 @@ from .cqt import cqt, vqt, hybrid_cqt
 from .decompose import nmf, nn_filter
 from .segment import recurrence_matrix, cross_similarity, rqa, dtw, agglomerative
 from .sequence import viterbi, viterbi_discriminative, viterbi_binary
+from .convert import (
+    hz_to_midi, midi_to_hz, hz_to_note, note_to_hz, midi_to_note, note_to_midi,
+    times_to_frames, frames_to_time, times_to_samples, samples_to_time,
+    frames_to_samples, samples_to_frames,
+    fft_frequencies, mel_frequencies,
+)
