@@ -152,3 +152,25 @@ public final class ModelRegistry: @unchecked Sendable {
         cache.removeAll()
     }
 }
+
+// MARK: - iOS / visionOS convenience
+
+#if os(iOS) || os(visionOS)
+extension ModelRegistry {
+    /// Configure with default iOS model locations.
+    ///
+    /// Scans the app bundle's `MetalMom-Models` directory (for bundled core models)
+    /// and the `ModelDownloader` cache directory (for downloaded models).
+    public func configureDefaultiOS() {
+        // Check for bundled models in the app bundle
+        if let bundlePath = Bundle.main.path(forResource: "MetalMom-Models", ofType: nil) {
+            configure(modelsDirectory: URL(fileURLWithPath: bundlePath))
+        }
+        // Also check the download cache
+        let cacheDir = ModelDownloader.shared.cacheDirectory
+        if FileManager.default.fileExists(atPath: cacheDir.path) {
+            configure(modelsDirectory: cacheDir)
+        }
+    }
+}
+#endif
