@@ -76,7 +76,7 @@ echo "==> Building wheel..."
 "$PYTHON" -m build --wheel --no-isolation --outdir dist/
 
 # ---------------------------------------------------------------------------
-# Step 3: Report the result
+# Step 3: Report & validate the result
 # ---------------------------------------------------------------------------
 WHEEL=$(ls -t dist/metalmom-*.whl 2>/dev/null | head -1)
 
@@ -102,6 +102,18 @@ if unzip -l "$WHEEL" | grep -q "_lib/metalmom.h"; then
 else
     echo "    [WARN] header NOT found inside wheel!"
     exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Step 4: Fix platform tag (macOS arm64 only, stable ABI from Python 3.11)
+# ---------------------------------------------------------------------------
+ORIGINAL_WHEEL="$WHEEL"
+FIXED_WHEEL=$(echo "$WHEEL" | sed 's/py3-none-any/cp311-abi3-macosx_14_0_arm64/')
+
+if [ "$ORIGINAL_WHEEL" != "$FIXED_WHEEL" ]; then
+    mv "$ORIGINAL_WHEEL" "$FIXED_WHEEL"
+    WHEEL="$FIXED_WHEEL"
+    echo "    [ok] renamed to platform-specific tag: $(basename "$FIXED_WHEEL")"
 fi
 
 echo ""
