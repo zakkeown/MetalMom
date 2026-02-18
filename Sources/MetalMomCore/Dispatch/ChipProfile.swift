@@ -2,7 +2,7 @@ import Foundation
 import Metal
 
 /// GPU chip profiling — detects capabilities and provides dispatch thresholds.
-public struct ChipProfile {
+public struct ChipProfile: Sendable {
     public let gpuFamily: GPUFamily
     public let estimatedCoreCount: Int
     public let maxBufferLength: Int
@@ -10,7 +10,7 @@ public struct ChipProfile {
 
     /// Mapped GPU families based on Metal's MTLGPUFamily API.
     /// Each case corresponds to the *highest* MTLGPUFamily the device reports.
-    public enum GPUFamily: Comparable {
+    public enum GPUFamily: Comparable, Sendable {
         case apple7   // M1 family
         case apple8   // M2 family
         case apple9   // M3 / M4 family (current SDK maps both here)
@@ -62,7 +62,7 @@ public struct ChipProfile {
         }
     }
 
-    public enum OperationType {
+    public enum OperationType: Sendable {
         case stft
         case matmul
         case elementwise

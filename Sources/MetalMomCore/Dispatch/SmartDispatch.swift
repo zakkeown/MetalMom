@@ -2,7 +2,7 @@ import Foundation
 
 /// Routes compute operations to the optimal backend based on data size.
 /// Prefers Metal when available; falls back to Accelerate (CPU).
-public final class SmartDispatcher {
+public final class SmartDispatcher: Sendable {
     public let activeBackend: BackendType
     public let metalBackend: MetalBackend?
 
