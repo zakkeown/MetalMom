@@ -19,8 +19,17 @@ jobs:
       - name: Build Swift package
         run: swift build
 
-      - name: Run Swift tests
-        run: swift test
+      - name: Run Swift tests (CPU-only, skip Metal test classes)
+        run: |
+          swift test \
+            --skip MetalSTFTTests \
+            --skip MetalMatmulTests \
+            --skip MetalElementwiseTests \
+            --skip MetalReductionTests \
+            --skip MetalConvolutionTests \
+            --skip MetalBackendTests \
+            --skip GPUParityTests \
+            --skip ThresholdCalibrationTests
 
       # ── Dylib ────────────────────────────────────────────────
       - name: Build dylib
@@ -49,16 +58,19 @@ jobs:
       - name: Select Xcode 16
         run: sudo xcode-select -s /Applications/Xcode_16.app
 
+      - name: Install iOS Simulator runtime
+        run: xcodebuild -downloadPlatform iOS
+
       - name: Build for iOS Simulator
         run: |
           xcodebuild build \
             -scheme MetalMomCore \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation
 
       - name: Build static bridge for iOS Simulator
         run: |
           xcodebuild build \
             -scheme MetalMomBridgeStatic \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation

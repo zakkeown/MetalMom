@@ -65,6 +65,9 @@ final class FusedMFCCTests: XCTestCase {
     }
 
     func testGPUvsCPUParity() throws {
+        guard ProcessInfo.processInfo.environment["CI"] == nil else {
+            throw XCTSkip("Metal GPU tests skipped on CI")
+        }
         guard MetalBackend.shared != nil else { throw XCTSkip("Metal not available") }
 
         let sig = makeSineSignal()
@@ -115,6 +118,9 @@ final class FusedMFCCTests: XCTestCase {
     }
 
     func testBenchmarkFusedVsPerStep() throws {
+        guard ProcessInfo.processInfo.environment["CI"] == nil else {
+            throw XCTSkip("Metal GPU benchmark skipped on CI")
+        }
         guard MetalBackend.shared != nil else { throw XCTSkip("Metal not available") }
 
         // 5 seconds of audio
