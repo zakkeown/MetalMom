@@ -288,6 +288,98 @@ public func mm_power_to_db(
     return MM_OK
 }
 
+// MARK: - Mel Spectrogram
+
+@_cdecl("mm_mel_spectrogram")
+public func mm_mel_spectrogram(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ power: Float,
+    _ nMels: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    // Copy input data into a Signal
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    // fMax <= 0 means use sr/2 (Python passes 0.0 for None)
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+    // hopLength <= 0 means use default (nFFT/4)
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    // winLength <= 0 means use default (nFFT)
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let result = MelSpectrogram.compute(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        center: center != 0,
+        power: power,
+        nMels: Int(nMels),
+        fMin: fMin,
+        fMax: fMaxOpt
+    )
+
+    // Fill output MMBuffer
+    let outCount = result.count
+    guard outCount > 0 else {
+        out.pointee.data = nil
+        out.pointee.ndim = Int32(result.shape.count)
+        withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+            tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+                for i in 0..<8 { shapePtr[i] = 0 }
+                for i in 0..<min(result.shape.count, 8) {
+                    shapePtr[i] = Int64(result.shape[i])
+                }
+            }
+        }
+        out.pointee.dtype = 0
+        out.pointee.count = 0
+        return MM_OK
+    }
+
+    let outData = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
+    result.withUnsafeBufferPointer { srcBuf in
+        outData.initialize(from: srcBuf.baseAddress!, count: outCount)
+    }
+
+    out.pointee.data = outData
+    out.pointee.ndim = Int32(result.shape.count)
+    let shape = result.shape
+    withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+        tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+            for i in 0..<8 { shapePtr[i] = 0 }
+            for i in 0..<min(shape.count, 8) {
+                shapePtr[i] = Int64(shape[i])
+            }
+        }
+    }
+    out.pointee.dtype = 0  // float32
+    out.pointee.count = Int64(outCount)
+
+    return MM_OK
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

@@ -48,6 +48,23 @@ np.save(os.path.join(GOLDEN_DIR, "mel_filterbank_40_1024.npy"), mel_fb_40_1024)
 mel_fb_custom = librosa.filters.mel(sr=22050, n_fft=2048, n_mels=64, fmin=300, fmax=8000)
 np.save(os.path.join(GOLDEN_DIR, "mel_filterbank_64_2048_300_8000.npy"), mel_fb_custom)
 
+# ── Mel spectrogram golden files ──
+# Default params: sr=22050, n_fft=2048, hop_length=512, n_mels=128, power=2.0
+mel_spec_default = librosa.feature.melspectrogram(y=signal_440, sr=22050)
+np.save(os.path.join(GOLDEN_DIR, "mel_spectrogram_440hz_default.npy"), mel_spec_default)
+
+# With custom params: n_mels=40, n_fft=1024
+mel_spec_40_1024 = librosa.feature.melspectrogram(
+    y=signal_440, sr=22050, n_fft=1024, n_mels=40
+)
+np.save(os.path.join(GOLDEN_DIR, "mel_spectrogram_440hz_40_1024.npy"), mel_spec_40_1024)
+
+# With custom fmin/fmax
+mel_spec_custom = librosa.feature.melspectrogram(
+    y=signal_440, sr=22050, n_fft=2048, n_mels=64, fmin=300, fmax=8000
+)
+np.save(os.path.join(GOLDEN_DIR, "mel_spectrogram_440hz_64_fmin300_fmax8000.npy"), mel_spec_custom)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -58,4 +75,7 @@ print(f"power_to_db shape: {stft_power_db.shape}, range: [{stft_power_db.min():.
 print(f"mel_fb_128_2048 shape: {mel_fb_128_2048.shape}, dtype: {mel_fb_128_2048.dtype}, range: [{mel_fb_128_2048.min():.6f}, {mel_fb_128_2048.max():.6f}]")
 print(f"mel_fb_40_1024 shape: {mel_fb_40_1024.shape}")
 print(f"mel_fb_custom shape: {mel_fb_custom.shape}")
+print(f"mel_spec_default shape: {mel_spec_default.shape}, dtype: {mel_spec_default.dtype}, range: [{mel_spec_default.min():.6f}, {mel_spec_default.max():.6f}]")
+print(f"mel_spec_40_1024 shape: {mel_spec_40_1024.shape}")
+print(f"mel_spec_custom shape: {mel_spec_custom.shape}")
 print(f"Golden files saved to {GOLDEN_DIR}")

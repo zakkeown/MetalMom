@@ -7,6 +7,8 @@ Usage::
     from metalmom.compat import librosa
     S = librosa.stft(y)
     y_hat = librosa.istft(S)
+    mel = librosa.feature.melspectrogram(y=y, sr=22050)
 """
 
 from .core import stft, istft
+from . import feature
