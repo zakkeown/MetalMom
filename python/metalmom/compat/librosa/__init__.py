@@ -13,3 +13,4 @@ Usage::
 from .core import load, resample, stft, istft, get_duration, get_samplerate
 from . import feature
 from . import onset
+from . import beat

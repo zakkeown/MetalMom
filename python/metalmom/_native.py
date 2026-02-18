@@ -185,6 +185,13 @@ ffi.cdef("""
                             int32_t backtrack,
                             MMBuffer* out);
 
+    /* Beat Tracking */
+    int32_t mm_beat_track(mm_context ctx, const float* signal_data, int64_t signal_length,
+                          int32_t sample_rate, int32_t hop_length, int32_t n_fft,
+                          int32_t n_mels, float f_min, float f_max,
+                          float start_bpm, int32_t trim,
+                          float* out_tempo, MMBuffer* out_beats);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

@@ -1395,6 +1395,56 @@ public func mm_onset_detect(
     return fillBuffer(result, out)
 }
 
+// MARK: - Beat Tracking
+
+@_cdecl("mm_beat_track")
+public func mm_beat_track(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ nFFT: Int32,
+    _ nMels: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ startBPM: Float,
+    _ trim: Int32,
+    _ outTempo: UnsafeMutablePointer<Float>?,
+    _ outBeats: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let outTempo = outTempo,
+          let outBeats = outBeats else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+    let doTrim = trim != 0
+
+    let (tempo, beats) = BeatTracker.beatTrack(
+        signal: signal,
+        sr: Int(sampleRate),
+        hopLength: hopOpt,
+        nFFT: Int(nFFT),
+        nMels: Int(nMels),
+        fmin: fMin,
+        fmax: fMaxOpt,
+        startBPM: startBPM,
+        trimFirst: doTrim,
+        trimLast: doTrim
+    )
+
+    outTempo.pointee = tempo
+    return fillBuffer(beats, outBeats)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
