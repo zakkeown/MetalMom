@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & Test (CPU-only)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Swift ────────────────────────────────────────────────
+      - name: Build Swift package
+        run: swift build
+
+      - name: Run Swift tests
+        run: swift test
+
+      # ── Dylib ────────────────────────────────────────────────
+      - name: Build dylib
+        run: ./scripts/build_dylib.sh
+
+      # ── Python ───────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: pip install numpy cffi soundfile pytest librosa mir_eval matplotlib
+
+      - name: Run Python tests
+        run: pytest Tests/ -v --tb=short
