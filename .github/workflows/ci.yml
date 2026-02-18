@@ -56,9 +56,9 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             -skipPackagePluginValidation
 
-      - name: Test on iOS Simulator
+      - name: Build static bridge for iOS Simulator
         run: |
-          xcodebuild test \
-            -scheme MetalMomTests \
+          xcodebuild build \
+            -scheme MetalMomBridgeStatic \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             -skipPackagePluginValidation

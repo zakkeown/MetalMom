@@ -78,6 +78,7 @@ struct ProfilingRunner {
     }
 }
 #else
+// ProfilingRunner is macOS-only (requires command-line arguments and tilde expansion).
 @main
 struct ProfilingRunner {
     static func main() {
