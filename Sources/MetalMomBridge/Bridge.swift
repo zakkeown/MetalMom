@@ -1630,6 +1630,49 @@ public func mm_plp(
     return fillBuffer(result, out)
 }
 
+// MARK: - YIN Pitch Estimation
+
+@_cdecl("mm_yin")
+public func mm_yin(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ frameLength: Int32,
+    _ hopLength: Int32,
+    _ troughThreshold: Float,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    // hopLength <= 0 means use default (frameLength/4)
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+
+    let result = YIN.yin(
+        signal: signal,
+        fMin: fMin,
+        fMax: fMax,
+        sr: Int(sampleRate),
+        frameLength: Int(frameLength),
+        hopLength: hopOpt,
+        troughThreshold: troughThreshold,
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

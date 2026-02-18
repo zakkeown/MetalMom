@@ -216,6 +216,13 @@ int32_t mm_plp(mm_context ctx, const float* signal_data, int64_t signal_length,
                float tempo_min, float tempo_max,
                MMBuffer* out);
 
+/* YIN Pitch Estimation */
+int32_t mm_yin(mm_context ctx, const float* signal_data, int64_t signal_length,
+               int32_t sample_rate, float f_min, float f_max,
+               int32_t frame_length, int32_t hop_length,
+               float trough_threshold, int32_t center,
+               MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 
