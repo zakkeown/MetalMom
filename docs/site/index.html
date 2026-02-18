@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetalMom — GPU-Accelerated Audio Analysis for Python</title>
+  <meta name="description" content="GPU-accelerated audio analysis for Python on Apple Silicon. Drop-in replacement for librosa. 2-3x faster. Zero configuration.">
+  <meta property="og:title" content="MetalMom">
+  <meta property="og:description" content="GPU-accelerated audio analysis for Python on Apple Silicon. Drop-in librosa replacement, 2-3x faster.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="getting-started.html">Getting Started</a>
+        <a href="migration-librosa.html">Migration</a>
+        <a href="tutorials/beat-tracking.html">Tutorials</a>
+        <a href="benchmarks.html">Benchmarks</a>
+        <a href="architecture.html">Architecture</a>
+        <a href="../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero
+       ============================================================ -->
+  <section class="hero" id="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">MetalMom</h1>
+      <p class="hero-subtitle">GPU-accelerated audio analysis for Python on Apple Silicon</p>
+      <p class="hero-tagline">Drop-in replacement for librosa. 2-3x faster. Zero configuration.</p>
+
+      <div class="hero-ctas">
+        <a href="getting-started.html" class="btn btn-primary">Get Started</a>
+        <a href="../api/index.html" class="btn btn-secondary">API Reference</a>
+      </div>
+
+      <div class="install-command">
+        <span class="prompt">$</span>
+        <span class="cmd">pip install metalmom</span>
+        <button class="copy-btn" aria-label="Copy install command">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Code Comparison
+       ============================================================ -->
+  <section class="code-comparison" id="code-comparison">
+    <div class="container">
+      <div class="section-heading">
+        <h2>Your librosa code already works</h2>
+        <p>Swap the import. Keep everything else.</p>
+      </div>
+
+      <div class="code-grid">
+        <!-- librosa -->
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-label">librosa</span>
+            <button class="code-block-copy" aria-label="Copy code">Copy</button>
+          </div>
+          <pre><code><span class="kw">import</span> <span class="var">librosa</span>
+
+<span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">librosa</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="str">"song.mp3"</span><span class="op">)</span>
+<span class="var">S</span> <span class="op">=</span> <span class="var">librosa</span><span class="op">.</span><span class="var">feature</span><span class="op">.</span><span class="fn">melspectrogram</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+<span class="var">tempo</span><span class="op">,</span> <span class="var">beats</span> <span class="op">=</span> <span class="var">librosa</span><span class="op">.</span><span class="var">beat</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span></code></pre>
+        </div>
+
+        <!-- MetalMom -->
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-label accent">MetalMom</span>
+            <button class="code-block-copy" aria-label="Copy code">Copy</button>
+          </div>
+          <pre><code><span class="kw">import</span> <span class="var">metalmom</span>
+
+<span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="str">"song.mp3"</span><span class="op">)</span>
+<span class="var">S</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">melspectrogram</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+<span class="var">tempo</span><span class="op">,</span> <span class="var">beats</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span></code></pre>
+        </div>
+      </div>
+
+      <p class="code-alias">Or just alias it: <code>import metalmom as librosa</code></p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Features
+       ============================================================ -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-heading">
+        <h2>Built for speed, designed for compatibility</h2>
+      </div>
+
+      <div class="features-grid">
+        <!-- GPU Accelerated -->
+        <div class="feature-card">
+          <div class="feature-icon gpu" aria-hidden="true">&#9889;</div>
+          <h3>GPU Accelerated</h3>
+          <p>Metal shaders and Accelerate framework on Apple Silicon. Smart dispatch automatically routes operations to the fastest backend.</p>
+        </div>
+
+        <!-- librosa Compatible -->
+        <div class="feature-card">
+          <div class="feature-icon compat" aria-hidden="true">&#9901;</div>
+          <h3>librosa Compatible</h3>
+          <p>120+ functions with matching signatures. Your existing code works unchanged. Full compat shim included.</p>
+        </div>
+
+        <!-- Neural Features -->
+        <div class="feature-card">
+          <div class="feature-icon neural" aria-hidden="true">&#10047;</div>
+          <h3>Neural Features</h3>
+          <p>67 CoreML models converted from madmom. Beat tracking, onset detection, chord recognition, piano transcription &mdash; all GPU-accelerated.</p>
+        </div>
+
+        <!-- Type Safe -->
+        <div class="feature-card">
+          <div class="feature-icon types" aria-hidden="true">&#10003;</div>
+          <h3>Type Safe</h3>
+          <p>Complete PEP 561 type stubs for all 18 modules. Full IDE support, mypy-clean, modern Python.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Spectrogram divider -->
+  <hr class="spectrogram-divider">
+
+  <!-- ============================================================
+       Stats Bar
+       ============================================================ -->
+  <div class="stats-bar">
+    <div class="container">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-number">120+</div>
+          <div class="stat-label">Functions</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">67</div>
+          <div class="stat-label">CoreML Models</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">2,295</div>
+          <div class="stat-label">Tests</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">2-3x</div>
+          <div class="stat-label">Faster</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Built with Metal on Apple Silicon</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/main.js"></script>
+</body>
+</html>
