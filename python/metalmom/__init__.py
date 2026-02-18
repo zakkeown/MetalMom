@@ -11,4 +11,4 @@ from .feature import (
     delta, stack_memory, poly_features,
 )
 from .evaluate import onset_evaluate, beat_evaluate, tempo_evaluate, chord_accuracy
-from .onset import onset_strength
+from .onset import onset_strength, onset_detect

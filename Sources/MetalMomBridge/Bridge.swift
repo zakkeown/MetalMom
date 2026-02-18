@@ -1340,6 +1340,61 @@ public func mm_onset_strength(
     return fillBuffer(result, out)
 }
 
+// MARK: - Onset Detection (Peak Picking)
+
+@_cdecl("mm_onset_detect")
+public func mm_onset_detect(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ nMels: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ center: Int32,
+    _ preMax: Int32,
+    _ postMax: Int32,
+    _ preAvg: Int32,
+    _ postAvg: Int32,
+    _ delta: Float,
+    _ wait: Int32,
+    _ backtrack: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData, signalLength > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+
+    let result = OnsetDetection.detectOnsets(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        nMels: Int(nMels),
+        fmin: fMin,
+        fmax: fMaxOpt,
+        center: center != 0,
+        preMax: Int(preMax),
+        postMax: Int(postMax),
+        preAvg: Int(preAvg),
+        postAvg: Int(postAvg),
+        delta: delta,
+        wait: Int(wait),
+        doBacktrack: backtrack != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

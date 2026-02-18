@@ -171,6 +171,16 @@ int32_t mm_onset_strength(mm_context ctx, const float* signal_data, int64_t sign
                           int32_t n_mels, float f_min, float f_max,
                           int32_t center, int32_t aggregate, MMBuffer* out);
 
+int32_t mm_onset_detect(mm_context ctx, const float* signal_data, int64_t signal_length,
+                        int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                        int32_t n_mels, float f_min, float f_max,
+                        int32_t center,
+                        int32_t pre_max, int32_t post_max,
+                        int32_t pre_avg, int32_t post_avg,
+                        float delta, int32_t wait,
+                        int32_t backtrack,
+                        MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 
