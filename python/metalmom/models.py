@@ -22,10 +22,25 @@ _MODEL_FAMILIES = {
     ],
     "chords": ["chords_dnn"],
     "chroma": ["chroma_dnn"],
-    "downbeats": [],
+    "downbeats": [
+        "downbeats_blstm_1", "downbeats_blstm_2", "downbeats_blstm_3", "downbeats_blstm_4",
+        "downbeats_blstm_5", "downbeats_blstm_6", "downbeats_blstm_7", "downbeats_blstm_8",
+        "downbeats_bgru_harmonic_0", "downbeats_bgru_harmonic_1", "downbeats_bgru_harmonic_2",
+        "downbeats_bgru_harmonic_3", "downbeats_bgru_harmonic_4", "downbeats_bgru_harmonic_5",
+        "downbeats_bgru_rhythmic_0", "downbeats_bgru_rhythmic_1", "downbeats_bgru_rhythmic_2",
+        "downbeats_bgru_rhythmic_3", "downbeats_bgru_rhythmic_4", "downbeats_bgru_rhythmic_5",
+    ],
     "key": ["key_cnn"],
-    "notes": [],
-    "onsets": [],
+    "notes": ["notes_brnn"],
+    "onsets": [
+        "onsets_rnn_1", "onsets_rnn_2", "onsets_rnn_3", "onsets_rnn_4",
+        "onsets_rnn_5", "onsets_rnn_6", "onsets_rnn_7", "onsets_rnn_8",
+        "onsets_brnn_1", "onsets_brnn_2", "onsets_brnn_3", "onsets_brnn_4",
+        "onsets_brnn_5", "onsets_brnn_6", "onsets_brnn_7", "onsets_brnn_8",
+        "onsets_brnn_pp_1", "onsets_brnn_pp_2", "onsets_brnn_pp_3", "onsets_brnn_pp_4",
+        "onsets_brnn_pp_5", "onsets_brnn_pp_6", "onsets_brnn_pp_7", "onsets_brnn_pp_8",
+        "onsets_cnn",
+    ],
 }
 
 
