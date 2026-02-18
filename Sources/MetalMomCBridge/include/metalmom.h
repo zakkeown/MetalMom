@@ -364,6 +364,17 @@ int32_t mm_reassigned_spectrogram(mm_context ctx, const float* signal_data, int6
                                    int32_t sample_rate, int32_t n_fft, int32_t hop_length,
                                    int32_t win_length, int32_t center, MMBuffer* out);
 
+/* Phase Vocoder */
+int32_t mm_phase_vocoder(mm_context ctx, const float* stft_data, int64_t stft_count,
+                          int32_t n_freqs, int32_t n_frames, int32_t sample_rate,
+                          float rate, int32_t hop_length, MMBuffer* out);
+
+/* Griffin-Lim */
+int32_t mm_griffinlim(mm_context ctx, const float* mag_data, int64_t mag_count,
+                       int32_t n_freqs, int32_t n_frames, int32_t sample_rate,
+                       int32_t n_iter, int32_t hop_length, int32_t win_length,
+                       int32_t center, int64_t output_length, MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

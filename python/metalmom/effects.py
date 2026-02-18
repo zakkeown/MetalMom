@@ -8,6 +8,7 @@ from ._buffer import buffer_to_numpy
 __all__ = [
     "hpss", "harmonic", "percussive", "time_stretch", "pitch_shift",
     "trim", "split", "preemphasis", "deemphasis",
+    "phase_vocoder", "griffinlim",
 ]
 
 
@@ -517,6 +518,129 @@ def deemphasis(y, coef=0.97, zi=None, return_zf=False, **kwargs):
         )
         if status != 0:
             raise RuntimeError(f"mm_deemphasis failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        return result.ravel()
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def phase_vocoder(D, rate, hop_length=None, **kwargs):
+    """Phase vocoder: time-stretch a complex STFT by a rate factor.
+
+    Parameters
+    ----------
+    D : np.ndarray
+        Complex STFT matrix, shape (n_freqs, n_frames).
+        Can be complex64 or complex128.
+    rate : float
+        Stretch rate. rate > 1 speeds up (fewer frames),
+        rate < 1 slows down (more frames).
+    hop_length : int or None
+        Hop length used to produce D. Default: (n_freqs - 1) * 2 // 4.
+
+    Returns
+    -------
+    np.ndarray
+        Time-stretched complex STFT, shape (n_freqs, new_n_frames).
+        Returned as complex64.
+    """
+    if D is None:
+        raise ValueError("D must be provided")
+    if rate <= 0:
+        raise ValueError("rate must be positive")
+
+    # Convert to complex64
+    if not np.iscomplexobj(D):
+        D = D.astype(np.complex64)
+    else:
+        D = np.asarray(D, dtype=np.complex64)
+
+    n_freqs, n_frames = D.shape
+    c_hop = int(hop_length) if hop_length is not None else 0
+
+    # Convert to interleaved float32 for C bridge
+    stft_interleaved = np.ascontiguousarray(D).view(np.float32)
+    stft_count = stft_interleaved.size
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        stft_ptr = ffi.cast("const float*", stft_interleaved.ctypes.data)
+
+        status = lib.mm_phase_vocoder(
+            ctx, stft_ptr, stft_count,
+            n_freqs, n_frames, 22050,
+            float(rate), c_hop,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_phase_vocoder failed with status {status}")
+
+        # Result is interleaved float32, reshape to complex64
+        result = buffer_to_numpy(out)
+        # result shape is [n_freqs, new_n_frames * 2] (interleaved real/imag)
+        # Actually fillBuffer returns raw floats; we need to view as complex
+        return result.view(np.complex64)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def griffinlim(S, n_iter=32, hop_length=None, win_length=None, center=True,
+               length=None, **kwargs):
+    """Reconstruct audio from a magnitude spectrogram using Griffin-Lim.
+
+    Parameters
+    ----------
+    S : np.ndarray
+        Magnitude spectrogram, shape (n_freqs, n_frames).
+    n_iter : int
+        Number of iterations. Default: 32.
+    hop_length : int or None
+        Hop length. Default: n_fft // 4.
+    win_length : int or None
+        Window length. Default: n_fft.
+    center : bool
+        Assumes centered STFT. Default: True.
+    length : int or None
+        Desired output length. Default: None.
+
+    Returns
+    -------
+    np.ndarray
+        Reconstructed audio signal, 1-D float32 array.
+    """
+    if S is None:
+        raise ValueError("S must be provided")
+
+    S = np.ascontiguousarray(S, dtype=np.float32)
+    n_freqs, n_frames = S.shape
+
+    c_hop = int(hop_length) if hop_length is not None else 0
+    c_win = int(win_length) if win_length is not None else 0
+    c_length = int(length) if length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        mag_ptr = ffi.cast("const float*", S.ctypes.data)
+
+        status = lib.mm_griffinlim(
+            ctx, mag_ptr, S.size,
+            n_freqs, n_frames, 22050,
+            n_iter, c_hop, c_win,
+            1 if center else 0,
+            c_length,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_griffinlim failed with status {status}")
 
         result = buffer_to_numpy(out)
         return result.ravel()

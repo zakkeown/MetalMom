@@ -2695,6 +2695,93 @@ public func mm_reassigned_spectrogram(
     return MM_OK
 }
 
+// MARK: - Phase Vocoder
+
+@_cdecl("mm_phase_vocoder")
+public func mm_phase_vocoder(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ stftData: UnsafePointer<Float>?,
+    _ stftCount: Int64,
+    _ nFreqs: Int32,
+    _ nFrames: Int32,
+    _ sampleRate: Int32,
+    _ rate: Float,
+    _ hopLength: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let stftData = stftData,
+          stftCount > 0,
+          nFreqs > 0,
+          nFrames > 0,
+          rate > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    // Build complex Signal from interleaved float data
+    let count = Int(stftCount)
+    let inputArray = Array(UnsafeBufferPointer(start: stftData, count: count))
+    let complexSTFT = Signal(complexData: inputArray, shape: [Int(nFreqs), Int(nFrames)],
+                              sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+
+    let result = PhaseVocoder.phaseVocoder(
+        complexSTFT: complexSTFT,
+        rate: rate,
+        hopLength: hopOpt
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - Griffin-Lim
+
+@_cdecl("mm_griffinlim")
+public func mm_griffinlim(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ magData: UnsafePointer<Float>?,
+    _ magCount: Int64,
+    _ nFreqs: Int32,
+    _ nFrames: Int32,
+    _ sampleRate: Int32,
+    _ nIter: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ outputLength: Int64,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let magData = magData,
+          magCount > 0,
+          nFreqs > 0,
+          nFrames > 0,
+          nIter > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let count = Int(magCount)
+    let inputArray = Array(UnsafeBufferPointer(start: magData, count: count))
+    let magnitude = Signal(data: inputArray, shape: [Int(nFreqs), Int(nFrames)],
+                            sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+    let lenOpt: Int? = outputLength > 0 ? Int(outputLength) : nil
+
+    let result = PhaseVocoder.griffinLim(
+        magnitude: magnitude,
+        nIter: Int(nIter),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        center: center != 0,
+        length: lenOpt
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
