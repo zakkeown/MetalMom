@@ -8,6 +8,24 @@ version = "0.1.0"
 description = "GPU-accelerated audio/music analysis on Apple Metal"
 requires-python = ">=3.11"
 license = "MIT"
+authors = [
+    { name = "Zak Keown" },
+]
+keywords = ["audio", "music", "analysis", "metal", "gpu", "accelerate", "dsp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Other",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     "numpy>=1.24",
     "cffi>=1.16",
@@ -19,8 +37,19 @@ display = ["matplotlib>=3.7"]
 eval = ["mir_eval>=0.7"]
 dev = ["pytest>=7.0", "librosa>=0.11.0"]
 
+[project.urls]
+Homepage = "https://github.com/zakkeown/MetalMom"
+Repository = "https://github.com/zakkeown/MetalMom"
+
 [tool.hatch.build.targets.wheel]
 packages = ["python/metalmom"]
+
+# Force-include the native dylib and header that are .gitignored.
+# Hatchling respects .gitignore by default, so without this the _lib/
+# directory would be excluded from the wheel.
+[tool.hatch.build.targets.wheel.force-include]
+"python/metalmom/_lib/libmetalmom.dylib" = "metalmom/_lib/libmetalmom.dylib"
+"python/metalmom/_lib/metalmom.h" = "metalmom/_lib/metalmom.h"
 
 [tool.pytest.ini_options]
 testpaths = ["Tests"]
