@@ -1,4 +1,4 @@
-"""Non-negative Matrix Factorization (NMF) decomposition."""
+"""Decomposition: NMF, Nearest-Neighbor Filter."""
 
 import numpy as np
 from ._native import ffi, lib
@@ -64,5 +64,69 @@ def nmf(V, n_components=8, n_iter=200, objective="euclidean", sr=22050):
         W = buffer_to_numpy(out_w)
         H = buffer_to_numpy(out_h)
         return W, H
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def nn_filter(S, k=10, metric="cosine", aggregate="mean", exclude_self=True, sr=22050):
+    """Nearest-neighbor filter for spectrograms.
+
+    Replaces each frame with the aggregation of its k nearest neighbors,
+    preserving repeating structure and smoothing transient events.
+    Matches ``librosa.decompose.nn_filter``.
+
+    Parameters
+    ----------
+    S : np.ndarray
+        Input spectrogram, shape (n_features, n_frames).
+    k : int
+        Number of nearest neighbors. Default 10.
+    metric : str
+        Distance metric: "cosine" or "euclidean". Default "cosine".
+    aggregate : str
+        Aggregation method: "mean" or "median". Default "mean".
+    exclude_self : bool
+        Exclude the frame itself from its neighbor set. Default True.
+    sr : int
+        Sample rate (metadata only). Default 22050.
+
+    Returns
+    -------
+    np.ndarray
+        Filtered spectrogram, same shape as input.
+    """
+    if S is None:
+        raise ValueError("S must be provided")
+
+    S = np.ascontiguousarray(S, dtype=np.float32)
+    if S.ndim != 2:
+        raise ValueError(f"S must be 2D, got {S.ndim}D")
+
+    n_features, n_frames = S.shape
+    if n_features == 0 or n_frames == 0:
+        raise ValueError("S dimensions must be positive")
+
+    metric_code = 1 if metric == "euclidean" else 0  # 0=cosine, 1=euclidean
+    agg_code = 1 if aggregate == "median" else 0     # 0=mean, 1=median
+    exclude_code = 1 if exclude_self else 0
+
+    data_ptr = ffi.cast("const float*", S.ctypes.data)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        rc = lib.mm_nn_filter(
+            ctx, data_ptr,
+            int(n_features), int(n_frames), int(sr),
+            int(k), metric_code, agg_code, exclude_code,
+            out,
+        )
+        if rc != 0:
+            raise RuntimeError(f"mm_nn_filter failed with code {rc}")
+
+        return buffer_to_numpy(out)
     finally:
         lib.mm_destroy(ctx)

@@ -3072,6 +3072,48 @@ public func mm_nmf(
     return fillBuffer(result.H, outH)
 }
 
+// MARK: - Nearest-Neighbor Filter
+
+@_cdecl("mm_nn_filter")
+public func mm_nn_filter(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ nFeatures: Int32,
+    _ nFrames: Int32,
+    _ sampleRate: Int32,
+    _ k: Int32,
+    _ metricType: Int32,
+    _ aggregateType: Int32,
+    _ excludeSelf: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data,
+          nFeatures > 0,
+          nFrames > 0,
+          k > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let totalCount = Int(nFeatures) * Int(nFrames)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: totalCount))
+    let spectrogram = Signal(data: inputArray, shape: [Int(nFeatures), Int(nFrames)],
+                             sampleRate: Int(sampleRate))
+
+    let metric: NNFilter.DistanceMetric = metricType == 1 ? .euclidean : .cosine
+    let aggregate: NNFilter.Aggregate = aggregateType == 1 ? .median : .mean
+
+    let result = NNFilter.filter(
+        spectrogram,
+        k: Int(k),
+        metric: metric,
+        aggregate: aggregate,
+        excludeSelf: excludeSelf != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

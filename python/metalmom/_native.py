@@ -420,6 +420,11 @@ ffi.cdef("""
                    int32_t sample_rate, int32_t n_components, int32_t n_iter,
                    int32_t objective, MMBuffer* out_w, MMBuffer* out_h);
 
+    /* Nearest-Neighbor Filter */
+    int32_t mm_nn_filter(mm_context ctx, const float* data, int32_t n_features, int32_t n_frames,
+                         int32_t sample_rate, int32_t k, int32_t metric, int32_t aggregate,
+                         int32_t exclude_self, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)
