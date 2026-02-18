@@ -262,3 +262,125 @@ def istft(stft_matrix, hop_length=None, win_length=None, center=True, length=Non
         return buffer_to_numpy(out)
     finally:
         lib.mm_destroy(ctx)
+
+
+def tone(frequency, sr=22050, length=None, duration=None, phi=0.0, **kwargs):
+    """Generate a pure sine tone.
+
+    Parameters
+    ----------
+    frequency : float
+        Frequency in Hz.
+    sr : int
+        Sample rate. Default: 22050.
+    length : int or None
+        Number of samples. If None, computed from duration (default: 1 second).
+    duration : float or None
+        Duration in seconds. Overrides length if both given.
+    phi : float
+        Phase offset in radians. Default: 0.0.
+
+    Returns
+    -------
+    np.ndarray
+        1D float32 array containing the sine tone.
+    """
+    if length is None:
+        length = int(sr * (duration if duration is not None else 1.0))
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+    try:
+        out = ffi.new("MMBuffer*")
+        status = lib.mm_tone(ctx, float(frequency), sr, length, float(phi), out)
+        if status != 0:
+            raise RuntimeError(f"mm_tone failed with status {status}")
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def chirp(fmin, fmax, sr=22050, length=None, duration=None, linear=True, **kwargs):
+    """Generate a frequency sweep (chirp).
+
+    Parameters
+    ----------
+    fmin : float
+        Start frequency in Hz.
+    fmax : float
+        End frequency in Hz.
+    sr : int
+        Sample rate. Default: 22050.
+    length : int or None
+        Number of samples. If None, computed from duration (default: 1 second).
+    duration : float or None
+        Duration in seconds. Overrides length if both given.
+    linear : bool
+        If True, linear sweep. If False, logarithmic sweep. Default: True.
+
+    Returns
+    -------
+    np.ndarray
+        1D float32 array containing the chirp signal.
+    """
+    if length is None:
+        length = int(sr * (duration if duration is not None else 1.0))
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+    try:
+        out = ffi.new("MMBuffer*")
+        status = lib.mm_chirp(ctx, float(fmin), float(fmax), sr, length,
+                               1 if linear else 0, out)
+        if status != 0:
+            raise RuntimeError(f"mm_chirp failed with status {status}")
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def clicks(times=None, sr=22050, length=None, click_freq=1000.0,
+           click_duration=0.1, **kwargs):
+    """Generate a click track.
+
+    Parameters
+    ----------
+    times : array-like or None
+        Click times in seconds. If None, generates default click pattern.
+    sr : int
+        Sample rate. Default: 22050.
+    length : int or None
+        Total length in samples. If None, auto-sized.
+    click_freq : float
+        Click frequency in Hz. Default: 1000.0.
+    click_duration : float
+        Click duration in seconds. Default: 0.1.
+
+    Returns
+    -------
+    np.ndarray
+        1D float32 array containing the click track.
+    """
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+    try:
+        out = ffi.new("MMBuffer*")
+        if times is not None:
+            times_arr = np.ascontiguousarray(times, dtype=np.float32)
+            times_ptr = ffi.cast("const float*", times_arr.ctypes.data)
+            n_times = len(times_arr)
+        else:
+            times_ptr = ffi.NULL
+            n_times = 0
+
+        c_length = int(length) if length is not None else 0
+        status = lib.mm_clicks(ctx, times_ptr, n_times, sr, c_length,
+                                float(click_freq), float(click_duration), out)
+        if status != 0:
+            raise RuntimeError(f"mm_clicks failed with status {status}")
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)

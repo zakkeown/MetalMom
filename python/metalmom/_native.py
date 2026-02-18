@@ -133,6 +133,15 @@ ffi.cdef("""
     int32_t mm_resample(mm_context ctx, const float* signal_data, int64_t signal_length,
                         int32_t source_sr, int32_t target_sr, MMBuffer* out);
 
+    /* Signal Generation */
+    int32_t mm_tone(mm_context ctx, float frequency, int32_t sr,
+                    int64_t length, float phi, MMBuffer* out);
+    int32_t mm_chirp(mm_context ctx, float fmin, float fmax, int32_t sr,
+                     int64_t length, int32_t linear, MMBuffer* out);
+    int32_t mm_clicks(mm_context ctx, const float* times, int32_t n_times,
+                      int32_t sr, int64_t length, float click_freq,
+                      float click_duration, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

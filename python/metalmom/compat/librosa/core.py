@@ -1,4 +1,4 @@
 """librosa.core compatibility shim."""
 
-from metalmom.core import load, resample, stft, istft, db_to_amplitude, db_to_power
+from metalmom.core import load, resample, stft, istft, db_to_amplitude, db_to_power, tone, chirp, clicks
 from metalmom.feature import amplitude_to_db, power_to_db

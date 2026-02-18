@@ -1051,6 +1051,63 @@ public func mm_resample(
     return fillBuffer(result, out)
 }
 
+// MARK: - Signal Generation
+
+@_cdecl("mm_tone")
+public func mm_tone(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ frequency: Float,
+    _ sr: Int32,
+    _ length: Int64,
+    _ phi: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let out = out else { return MM_ERR_INVALID_INPUT }
+    let result = SignalGen.tone(frequency: frequency, sr: Int(sr),
+                                 length: Int(length), phi: phi)
+    return fillBuffer(result, out)
+}
+
+@_cdecl("mm_chirp")
+public func mm_chirp(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ fmin: Float,
+    _ fmax: Float,
+    _ sr: Int32,
+    _ length: Int64,
+    _ linear: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let out = out else { return MM_ERR_INVALID_INPUT }
+    let result = SignalGen.chirp(fmin: fmin, fmax: fmax, sr: Int(sr),
+                                  length: Int(length), linear: linear != 0)
+    return fillBuffer(result, out)
+}
+
+@_cdecl("mm_clicks")
+public func mm_clicks(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ times: UnsafePointer<Float>?,
+    _ nTimes: Int32,
+    _ sr: Int32,
+    _ length: Int64,
+    _ clickFreq: Float,
+    _ clickDuration: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let out = out else { return MM_ERR_INVALID_INPUT }
+
+    var clickTimes: [Float]? = nil
+    if let t = times, nTimes > 0 {
+        clickTimes = Array(UnsafeBufferPointer(start: t, count: Int(nTimes)))
+    }
+
+    let len: Int? = length > 0 ? Int(length) : nil
+    let result = SignalGen.clicks(times: clickTimes, sr: Int(sr), length: len,
+                                    clickFreq: clickFreq, clickDuration: clickDuration)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
