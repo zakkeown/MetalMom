@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import MetalMomCore
 
@@ -76,3 +77,11 @@ struct ProfilingRunner {
         print("Attach Instruments (Time Profiler + os_signpost) to see detailed breakdown.")
     }
 }
+#else
+@main
+struct ProfilingRunner {
+    static func main() {
+        print("ProfilingRunner is only available on macOS.")
+    }
+}
+#endif
