@@ -165,6 +165,12 @@ int32_t mm_tempo_evaluate(mm_context ctx, float ref_tempo, float est_tempo,
 int32_t mm_chord_accuracy(mm_context ctx, const int32_t* reference, const int32_t* estimated,
                           int32_t n, float* out_accuracy);
 
+/* Onset Detection */
+int32_t mm_onset_strength(mm_context ctx, const float* signal_data, int64_t signal_length,
+                          int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                          int32_t n_mels, float f_min, float f_max,
+                          int32_t center, int32_t aggregate, MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

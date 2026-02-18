@@ -156,6 +156,15 @@ np.save(os.path.join(GOLDEN_DIR, "poly_features_440hz_default.npy"), poly_defaul
 poly_order2 = librosa.feature.poly_features(S=S_for_poly, order=2)
 np.save(os.path.join(GOLDEN_DIR, "poly_features_440hz_order2.npy"), poly_order2)
 
+# ── Onset strength golden files ──
+# Default params: sr=22050, n_fft=2048, hop_length=512, n_mels=128
+onset_env = librosa.onset.onset_strength(y=signal_440, sr=sr)
+np.save(os.path.join(GOLDEN_DIR, "onset_strength_440hz_default.npy"), onset_env)
+
+# Also save test signal under standard name for onset tests
+np.save(os.path.join(GOLDEN_DIR, "test_signal.npy"), signal_440)
+np.save(os.path.join(GOLDEN_DIR, "onset_strength.npy"), onset_env)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -186,4 +195,5 @@ print(f"delta_delta shape: {delta_delta.shape}, range: [{delta_delta.min():.6f},
 print(f"stack_mem shape: {stack_mem.shape}")
 print(f"poly_default shape: {poly_default.shape}, range: [{poly_default.min():.6f}, {poly_default.max():.6f}]")
 print(f"poly_order2 shape: {poly_order2.shape}, range: [{poly_order2.min():.6f}, {poly_order2.max():.6f}]")
+print(f"onset_env shape: {onset_env.shape}, range: [{onset_env.min():.6f}, {onset_env.max():.6f}]")
 print(f"Golden files saved to {GOLDEN_DIR}")
