@@ -2278,6 +2278,55 @@ public func mm_neural_onset_detect(
     return fillBuffer(result, out)
 }
 
+// MARK: - Downbeat Detection
+
+@_cdecl("mm_downbeat_detect")
+public func mm_downbeat_detect(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ activations: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ fps: Float,
+    _ beatsPerBar: Int32,
+    _ minBPM: Float,
+    _ maxBPM: Float,
+    _ transitionLambda: Float,
+    _ outBeats: UnsafeMutablePointer<MMBuffer>?,
+    _ outDownbeats: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let activations = activations,
+          nFrames > 0,
+          let outBeats = outBeats,
+          let outDownbeats = outDownbeats else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let totalCount = Int(nFrames) * 3
+    let actArray = Array(UnsafeBufferPointer(start: activations, count: totalCount))
+
+    let (beatFrames, downbeatFrames, _) = Downbeat.decode(
+        activations: actArray,
+        nFrames: Int(nFrames),
+        fps: fps,
+        beatsPerBar: Int(beatsPerBar),
+        minBPM: minBPM,
+        maxBPM: maxBPM,
+        transitionLambda: transitionLambda
+    )
+
+    // Fill beat frames buffer
+    let floatBeats = beatFrames.map { Float($0) }
+    let beatsSignal = Signal(data: floatBeats.isEmpty ? [] : floatBeats,
+                             shape: [floatBeats.count], sampleRate: 0)
+    let beatsStatus = fillBuffer(beatsSignal, outBeats)
+    guard beatsStatus == MM_OK else { return beatsStatus }
+
+    // Fill downbeat frames buffer
+    let floatDownbeats = downbeatFrames.map { Float($0) }
+    let downbeatsSignal = Signal(data: floatDownbeats.isEmpty ? [] : floatDownbeats,
+                                 shape: [floatDownbeats.count], sampleRate: 0)
+    return fillBuffer(downbeatsSignal, outDownbeats)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

@@ -241,3 +241,99 @@ def neural_beat_track(activations, fps=100.0, min_bpm=55.0, max_bpm=215.0,
         return tempo, frames * hop_length
     else:
         raise ValueError(f"Unknown units: {units!r}. Must be 'frames', 'time', or 'samples'.")
+
+
+def downbeat_detect(activations, fps=100.0, beats_per_bar=4,
+                    min_bpm=55.0, max_bpm=215.0, transition_lambda=100.0,
+                    units='frames', hop_length=441, sr=44100, **kwargs):
+    """Detect downbeats from pre-computed neural activation probabilities.
+
+    Takes 3-class activation probabilities (no-beat, beat, downbeat) and
+    finds beat and downbeat positions using DP beat tracking + bar-position
+    decoding.
+
+    Parameters
+    ----------
+    activations : np.ndarray
+        Activation probabilities, shape ``(n_frames, 3)``.
+        Column 0: P(no beat), Column 1: P(beat), Column 2: P(downbeat).
+    fps : float
+        Frames per second of the activation signal. Default: 100.0.
+    beats_per_bar : int
+        Expected beats per bar (e.g. 4 for 4/4 time). Default: 4.
+    min_bpm : float
+        Minimum tempo in BPM. Default: 55.0.
+    max_bpm : float
+        Maximum tempo in BPM. Default: 215.0.
+    transition_lambda : float
+        Penalty for tempo deviations. Higher = smoother. Default: 100.0.
+    units : str
+        ``'frames'`` (default) returns frame indices;
+        ``'time'`` returns times in seconds;
+        ``'samples'`` returns sample indices.
+    hop_length : int
+        Hop length (used for sample conversion). Default: 441.
+    sr : int
+        Sample rate (used for time/sample conversion). Default: 44100.
+
+    Returns
+    -------
+    beat_frames : np.ndarray
+        All beat locations (including downbeats).
+    downbeat_frames : np.ndarray
+        Downbeat locations only.
+    """
+    activations = np.ascontiguousarray(activations, dtype=np.float32)
+    if activations.ndim == 2:
+        n_frames = activations.shape[0]
+        assert activations.shape[1] == 3, (
+            f"activations must have 3 columns, got {activations.shape[1]}"
+        )
+        activations = activations.ravel()  # flatten to row-major [nFrames*3]
+    elif activations.ndim == 1:
+        assert len(activations) % 3 == 0, (
+            f"1D activations length must be divisible by 3, got {len(activations)}"
+        )
+        n_frames = len(activations) // 3
+    else:
+        raise ValueError(f"activations must be 1D or 2D, got ndim={activations.ndim}")
+
+    if n_frames == 0:
+        empty = np.array([], dtype=int)
+        return empty, empty
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out_beats = ffi.new("MMBuffer*")
+        out_downbeats = ffi.new("MMBuffer*")
+        act_ptr = ffi.cast("const float*", activations.ctypes.data)
+
+        status = lib.mm_downbeat_detect(
+            ctx, act_ptr, n_frames,
+            float(fps), int(beats_per_bar),
+            float(min_bpm), float(max_bpm),
+            float(transition_lambda),
+            out_beats, out_downbeats,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_downbeat_detect failed with status {status}")
+
+        beats_result = buffer_to_numpy(out_beats)
+        downbeats_result = buffer_to_numpy(out_downbeats)
+        beat_frames = beats_result.ravel().astype(int)
+        downbeat_frames = downbeats_result.ravel().astype(int)
+    finally:
+        lib.mm_destroy(ctx)
+
+    if units == 'frames':
+        return beat_frames, downbeat_frames
+    elif units == 'time':
+        return (beat_frames.astype(np.float64) / fps,
+                downbeat_frames.astype(np.float64) / fps)
+    elif units == 'samples':
+        return beat_frames * hop_length, downbeat_frames * hop_length
+    else:
+        raise ValueError(f"Unknown units: {units!r}. Must be 'frames', 'time', or 'samples'.")

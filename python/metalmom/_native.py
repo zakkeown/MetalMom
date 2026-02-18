@@ -317,6 +317,14 @@ ffi.cdef("""
                                    int32_t combine_method, int32_t wait,
                                    MMBuffer* out);
 
+    /* Downbeat Detection */
+    int32_t mm_downbeat_detect(mm_context ctx,
+                                const float* activations, int32_t n_frames,
+                                float fps, int32_t beats_per_bar,
+                                float min_bpm, float max_bpm,
+                                float transition_lambda,
+                                MMBuffer* out_beats, MMBuffer* out_downbeats);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)
