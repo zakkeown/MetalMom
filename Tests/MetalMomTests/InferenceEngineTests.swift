@@ -36,7 +36,7 @@ final class InferenceEngineTests: XCTestCase {
     // MARK: - Error handling tests
 
     func testInitWithInvalidCompiledURLThrows() {
-        let bogus = URL(fileURLWithPath: "/tmp/nonexistent_model.mlmodelc")
+        let bogus = FileManager.default.temporaryDirectory.appendingPathComponent("nonexistent_model.mlmodelc")
         XCTAssertThrowsError(try InferenceEngine(compiledModelURL: bogus)) { error in
             // Any error is expected — just make sure it throws.
             XCTAssertNotNil(error)
@@ -44,7 +44,7 @@ final class InferenceEngineTests: XCTestCase {
     }
 
     func testInitWithInvalidSourceURLThrows() {
-        let bogus = URL(fileURLWithPath: "/tmp/nonexistent_model.mlmodel")
+        let bogus = FileManager.default.temporaryDirectory.appendingPathComponent("nonexistent_model.mlmodel")
         XCTAssertThrowsError(try InferenceEngine(sourceModelURL: bogus)) { error in
             XCTAssertNotNil(error)
         }

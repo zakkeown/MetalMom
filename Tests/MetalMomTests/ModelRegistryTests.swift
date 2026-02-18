@@ -71,7 +71,7 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertFalse(before.isEmpty)
 
         // Reconfigure with a bogus directory.
-        let bogus = URL(fileURLWithPath: "/tmp/nonexistent_models_dir")
+        let bogus = FileManager.default.temporaryDirectory.appendingPathComponent("nonexistent_models_dir")
         registry.configure(modelsDirectory: bogus)
         XCTAssertEqual(registry.availableModels, [],
             "Should re-scan after reconfigure")
@@ -79,7 +79,7 @@ final class ModelRegistryTests: XCTestCase {
 
     func testAvailableModelsWithBogusDirectory() {
         let registry = makeRegistry()
-        let bogus = URL(fileURLWithPath: "/tmp/nonexistent_models_dir_\(UUID().uuidString)")
+        let bogus = FileManager.default.temporaryDirectory.appendingPathComponent("nonexistent_models_dir_\(UUID().uuidString)")
         registry.configure(modelsDirectory: bogus)
         XCTAssertEqual(registry.availableModels, [])
     }
