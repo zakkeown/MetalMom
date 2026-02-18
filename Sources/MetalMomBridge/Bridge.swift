@@ -3255,6 +3255,114 @@ public func mm_agglomerative(
     return fillBuffer(result, out)
 }
 
+// MARK: - Viterbi Decoding (HMM)
+
+@_cdecl("mm_viterbi")
+public func mm_viterbi(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ logObsData: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ nStates: Int32,
+    _ logInitial: UnsafePointer<Float>?,
+    _ logTransition: UnsafePointer<Float>?,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let logObsData = logObsData,
+          nFrames > 0, nStates > 0,
+          let logInitial = logInitial,
+          let logTransition = logTransition,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let frames = Int(nFrames)
+    let states = Int(nStates)
+
+    // Convert flat log_obs [nFrames * nStates] to [[Float]]
+    let obsFlat = Array(UnsafeBufferPointer(start: logObsData, count: frames * states))
+    var logObs = [[Float]]()
+    logObs.reserveCapacity(frames)
+    for t in 0..<frames {
+        let start = t * states
+        logObs.append(Array(obsFlat[start..<start + states]))
+    }
+
+    // Convert flat log_initial [nStates] to [Float]
+    let logInit = Array(UnsafeBufferPointer(start: logInitial, count: states))
+
+    // Convert flat log_transition [nStates * nStates] to [[Float]]
+    let transFlat = Array(UnsafeBufferPointer(start: logTransition, count: states * states))
+    var logTrans = [[Float]]()
+    logTrans.reserveCapacity(states)
+    for i in 0..<states {
+        let start = i * states
+        logTrans.append(Array(transFlat[start..<start + states]))
+    }
+
+    // Run Viterbi
+    let result = HMM.viterbi(
+        logObservations: logObs,
+        logInitial: logInit,
+        logTransition: logTrans
+    )
+
+    // Return path as float-encoded indices
+    let pathFloats = result.path.map { Float($0) }
+    let pathSignal = Signal(data: pathFloats, shape: [frames], sampleRate: 0)
+    return fillBuffer(pathSignal, out)
+}
+
+// MARK: - Viterbi Decoding (CRF / Discriminative)
+
+@_cdecl("mm_viterbi_discriminative")
+public func mm_viterbi_discriminative(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ unaryData: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ nStates: Int32,
+    _ pairwiseData: UnsafePointer<Float>?,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let unaryData = unaryData,
+          nFrames > 0, nStates > 0,
+          let pairwiseData = pairwiseData,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let frames = Int(nFrames)
+    let states = Int(nStates)
+
+    // Convert flat unary [nFrames * nStates] to [[Float]]
+    let unaryFlat = Array(UnsafeBufferPointer(start: unaryData, count: frames * states))
+    var unaryScores = [[Float]]()
+    unaryScores.reserveCapacity(frames)
+    for t in 0..<frames {
+        let start = t * states
+        unaryScores.append(Array(unaryFlat[start..<start + states]))
+    }
+
+    // Convert flat pairwise [nStates * nStates] to [[Float]]
+    let pairFlat = Array(UnsafeBufferPointer(start: pairwiseData, count: states * states))
+    var pairwiseScores = [[Float]]()
+    pairwiseScores.reserveCapacity(states)
+    for i in 0..<states {
+        let start = i * states
+        pairwiseScores.append(Array(pairFlat[start..<start + states]))
+    }
+
+    // Run CRF Viterbi
+    let result = CRF.viterbiDecode(
+        unaryScores: unaryScores,
+        pairwiseScores: pairwiseScores
+    )
+
+    // Return path as float-encoded indices
+    let pathFloats = result.path.map { Float($0) }
+    let pathSignal = Signal(data: pathFloats, shape: [frames], sampleRate: 0)
+    return fillBuffer(pathSignal, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

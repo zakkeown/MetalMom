@@ -445,6 +445,18 @@ int32_t mm_agglomerative(mm_context ctx, const float* data, int64_t count,
                           int32_t n_features, int32_t n_frames,
                           int32_t n_segments, MMBuffer* out);
 
+/* Viterbi Decoding (HMM) */
+int32_t mm_viterbi(mm_context ctx,
+                   const float* log_obs_data, int32_t n_frames, int32_t n_states,
+                   const float* log_initial, const float* log_transition,
+                   MMBuffer* out);
+
+/* Viterbi Decoding (Discriminative / CRF) */
+int32_t mm_viterbi_discriminative(mm_context ctx,
+                                   const float* unary_data, int32_t n_frames, int32_t n_states,
+                                   const float* pairwise_data,
+                                   MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

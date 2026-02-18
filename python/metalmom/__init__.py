@@ -24,3 +24,4 @@ from .transcribe import piano_transcribe
 from .cqt import cqt, vqt, hybrid_cqt
 from .decompose import nmf, nn_filter
 from .segment import recurrence_matrix, cross_similarity, rqa, dtw, agglomerative
+from .sequence import viterbi, viterbi_discriminative, viterbi_binary
