@@ -1,4 +1,4 @@
-"""Segmentation: recurrence matrix, cross-similarity, and RQA."""
+"""Segmentation: recurrence matrix, cross-similarity, RQA, and DTW."""
 
 import numpy as np
 from ._native import ffi, lib
@@ -246,6 +246,156 @@ def rqa(rec_matrix, lmin=2, vmin=2):
         "longest_diagonal_line": int(longest_diag),
         "entropy": float(ent),
     }
+
+
+def dtw(cost_matrix=None, X=None, Y=None, metric="euclidean",
+        step_pattern="standard", band_width=None):
+    """Compute Dynamic Time Warping.
+
+    Either provide a pre-computed ``cost_matrix`` or two feature matrices
+    ``X`` and ``Y`` (from which a Euclidean cost matrix is computed).
+
+    Parameters
+    ----------
+    cost_matrix : np.ndarray or None
+        Pre-computed cost matrix, shape (N, M). If provided, X and Y are
+        ignored.
+    X : np.ndarray or None
+        Feature matrix, shape (n_features, N). Required if cost_matrix is
+        None.
+    Y : np.ndarray or None
+        Feature matrix, shape (n_features, M). Required if cost_matrix is
+        None.
+    metric : str
+        Distance metric for computing cost from X, Y. Currently only
+        "euclidean" is supported. Default "euclidean".
+    step_pattern : str
+        "standard" or "symmetric2". Default "standard".
+    band_width : int or None
+        Sakoe-Chiba band width. None means no constraint. Default None.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+        - "accumulated_cost": np.ndarray, shape (N, M)
+        - "warping_path": np.ndarray, shape (L, 2) with (row, col) pairs
+        - "total_cost": float
+    """
+    if cost_matrix is None:
+        if X is None or Y is None:
+            raise ValueError(
+                "Either cost_matrix or both X and Y must be provided"
+            )
+        # Compute Euclidean cost matrix from feature matrices
+        X = np.ascontiguousarray(X, dtype=np.float32)
+        Y = np.ascontiguousarray(Y, dtype=np.float32)
+        if X.ndim != 2 or Y.ndim != 2:
+            raise ValueError("X and Y must be 2D")
+        if X.shape[0] != Y.shape[0]:
+            raise ValueError(
+                f"Feature dimensions must match: {X.shape[0]} vs {Y.shape[0]}"
+            )
+        n_features = X.shape[0]
+        n_x = X.shape[1]
+        n_y = Y.shape[1]
+        # Compute pairwise Euclidean distances
+        cost_matrix = np.zeros((n_x, n_y), dtype=np.float32)
+        for i in range(n_x):
+            for j in range(n_y):
+                diff = X[:, i] - Y[:, j]
+                cost_matrix[i, j] = np.sqrt(np.dot(diff, diff))
+
+    cost_matrix = np.ascontiguousarray(cost_matrix, dtype=np.float32)
+    if cost_matrix.ndim != 2:
+        raise ValueError(f"cost_matrix must be 2D, got {cost_matrix.ndim}D")
+
+    n, m = cost_matrix.shape
+    if n == 0 or m == 0:
+        return {
+            "accumulated_cost": np.zeros((0, 0), dtype=np.float32),
+            "warping_path": np.zeros((0, 2), dtype=np.int64),
+            "total_cost": 0.0,
+        }
+
+    step_code = 1 if step_pattern == "symmetric2" else 0
+    bw = int(band_width) if band_width is not None else 0
+
+    data_ptr = ffi.cast("const float*", cost_matrix.ctypes.data)
+    count = int(n * m)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        rc = lib.mm_dtw(
+            ctx, data_ptr, count,
+            int(n), int(m),
+            step_code, bw,
+            out,
+        )
+        if rc != 0:
+            raise RuntimeError(f"mm_dtw failed with code {rc}")
+
+        accumulated_cost = buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+    # Backtrack in Python from accumulated cost matrix
+    total_cost = float(accumulated_cost[n - 1, m - 1])
+    path = _dtw_backtrack(accumulated_cost)
+
+    return {
+        "accumulated_cost": accumulated_cost,
+        "warping_path": np.array(path, dtype=np.int64),
+        "total_cost": total_cost,
+    }
+
+
+def _dtw_backtrack(D):
+    """Backtrack through accumulated cost matrix to find optimal warping path.
+
+    Parameters
+    ----------
+    D : np.ndarray
+        Accumulated cost matrix, shape (N, M).
+
+    Returns
+    -------
+    list of (int, int)
+        Warping path from (0, 0) to (N-1, M-1).
+    """
+    n, m = D.shape
+    if n == 0 or m == 0:
+        return []
+
+    path = []
+    i, j = n - 1, m - 1
+    path.append((i, j))
+
+    while i > 0 or j > 0:
+        if i == 0:
+            j -= 1
+        elif j == 0:
+            i -= 1
+        else:
+            diag = D[i - 1, j - 1]
+            up = D[i - 1, j]
+            left = D[i, j - 1]
+
+            if diag <= up and diag <= left:
+                i -= 1
+                j -= 1
+            elif up <= left:
+                i -= 1
+            else:
+                j -= 1
+        path.append((i, j))
+
+    path.reverse()
+    return path
 
 
 def _extract_lines(arr, min_length, out_list):

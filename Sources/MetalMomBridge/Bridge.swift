@@ -3192,6 +3192,41 @@ public func mm_cross_similarity(
     return fillBuffer(result, out)
 }
 
+// MARK: - Dynamic Time Warping
+
+@_cdecl("mm_dtw")
+public func mm_dtw(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ rows: Int32,
+    _ cols: Int32,
+    _ stepPattern: Int32,    // 0=standard, 1=symmetric2
+    _ bandWidth: Int32,      // 0=no constraint, >0=Sakoe-Chiba band width
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let n = Int(rows)
+    let m = Int(cols)
+    guard n > 0 && m > 0 && n * m == length else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let costMatrix = Signal(data: inputArray, shape: [n, m], sampleRate: 0)
+
+    let pattern: DTW.StepPattern = stepPattern == 1 ? .symmetric2 : .standard
+    let bw: Int? = bandWidth > 0 ? Int(bandWidth) : nil
+
+    let result = DTW.compute(costMatrix: costMatrix, stepPattern: pattern, bandWidth: bw)
+
+    return fillBuffer(result.accumulatedCost, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

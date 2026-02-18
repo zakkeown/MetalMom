@@ -438,6 +438,12 @@ ffi.cdef("""
                                  int32_t n_features, int32_t n_frames_a, int32_t n_frames_b,
                                  int32_t metric, MMBuffer* out);
 
+    /* Dynamic Time Warping */
+    int32_t mm_dtw(mm_context ctx, const float* data, int64_t count,
+                   int32_t rows, int32_t cols,
+                   int32_t step_pattern, int32_t band_width,
+                   MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)
