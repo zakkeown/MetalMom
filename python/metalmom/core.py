@@ -499,3 +499,66 @@ def clicks(times=None, sr=22050, length=None, click_freq=1000.0,
         return buffer_to_numpy(out)
     finally:
         lib.mm_destroy(ctx)
+
+
+def reassigned_spectrogram(y, sr=22050, n_fft=2048, hop_length=None,
+                           win_length=None, center=True, **kwargs):
+    """Compute the reassigned spectrogram.
+
+    Corrects the smearing of the standard STFT by reassigning each energy
+    point to a more accurate time-frequency location.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1D float32 or float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    n_fft : int
+        FFT window size. Default: 2048.
+    hop_length : int or None
+        Hop length (default: n_fft // 4).
+    win_length : int or None
+        Window length (default: n_fft).
+    center : bool
+        Center the signal. Default: True.
+
+    Returns
+    -------
+    tuple of (np.ndarray, np.ndarray, np.ndarray)
+        - magnitude: STFT magnitude, shape (n_fft//2+1, n_frames)
+        - frequencies: reassigned frequency coordinates (Hz)
+        - times: reassigned time coordinates (seconds)
+    """
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    hop = int(hop_length) if hop_length is not None else 0
+    win = int(win_length) if win_length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_reassigned_spectrogram(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, hop, win,
+            1 if center else 0,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(
+                f"mm_reassigned_spectrogram failed with status {status}"
+            )
+
+        # Result is shape [3, n_freqs, n_frames] -- unpack the three planes
+        result = buffer_to_numpy(out)
+        magnitude = result[0]
+        frequencies = result[1]
+        times = result[2]
+        return magnitude, frequencies, times
+    finally:
+        lib.mm_destroy(ctx)

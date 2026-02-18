@@ -2616,6 +2616,85 @@ public func mm_hybrid_cqt(
     return fillBuffer(result, out)
 }
 
+// MARK: - Reassigned Spectrogram
+
+@_cdecl("mm_reassigned_spectrogram")
+public func mm_reassigned_spectrogram(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let (mag, freqs, times) = ReassignedSpectrogram.compute(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        center: center != 0
+    )
+
+    // Pack three outputs into shape [3, nFreqs, nFrames]
+    let nFreqs = mag.shape[0]
+    let nFrames = mag.shape.count > 1 ? mag.shape[1] : 0
+    let planeSize = nFreqs * nFrames
+    let totalCount = 3 * planeSize
+
+    guard planeSize > 0 else {
+        // Empty result
+        let emptySignal = Signal(data: [], shape: [3, nFreqs, 0], sampleRate: Int(sampleRate))
+        return fillBuffer(emptySignal, out)
+    }
+
+    let outData = UnsafeMutablePointer<Float>.allocate(capacity: totalCount)
+
+    mag.withUnsafeBufferPointer { magBuf in
+        outData.initialize(from: magBuf.baseAddress!, count: planeSize)
+    }
+    freqs.withUnsafeBufferPointer { freqBuf in
+        (outData + planeSize).initialize(from: freqBuf.baseAddress!, count: planeSize)
+    }
+    times.withUnsafeBufferPointer { timeBuf in
+        (outData + 2 * planeSize).initialize(from: timeBuf.baseAddress!, count: planeSize)
+    }
+
+    out.pointee.data = outData
+    out.pointee.ndim = 3
+    withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+        tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+            for i in 0..<8 { shapePtr[i] = 0 }
+            shapePtr[0] = 3
+            shapePtr[1] = Int64(nFreqs)
+            shapePtr[2] = Int64(nFrames)
+        }
+    }
+    out.pointee.dtype = 0
+    out.pointee.count = Int64(totalCount)
+
+    return MM_OK
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
