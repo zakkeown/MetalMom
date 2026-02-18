@@ -18,7 +18,8 @@ CPU-only originals.
 - **CPU fallback** -- Accelerate (vDSP/BLAS) when no GPU is available or for small inputs
 - **Smart dispatch** -- automatically routes to GPU or CPU based on input size
 - **CoreML neural inference** -- 67 converted madmom models running via CoreML/ANE
-- **2,160 tests** -- 968 Swift XCTests + 1,192 Python pytest tests with librosa parity checks
+- **2,295 tests** -- 1,062 Swift XCTests + 1,233 Python pytest tests with librosa parity checks
+- **2-3x faster than librosa** on 30s signals, [up to 7.6x on full pipelines](BENCHMARKS.md)
 
 ## Installation
 
