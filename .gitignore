@@ -22,3 +22,6 @@ python/metalmom/_lib/
 
 # Worktrees
 .worktrees/
+
+# Benchmark results (machine-specific, regenerated)
+benchmarks/results/bench_*.json
