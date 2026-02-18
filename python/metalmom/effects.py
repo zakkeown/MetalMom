@@ -5,7 +5,7 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
-__all__ = ["hpss", "harmonic", "percussive", "time_stretch"]
+__all__ = ["hpss", "harmonic", "percussive", "time_stretch", "pitch_shift"]
 
 
 def hpss(y, kernel_size=31, power=2.0, margin=1.0,
@@ -237,6 +237,63 @@ def time_stretch(y, rate, sr=22050, n_fft=2048, hop_length=None, **kwargs):
         )
         if status != 0:
             raise RuntimeError(f"mm_time_stretch failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        return result.ravel()
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def pitch_shift(y, sr=22050, n_steps=0, bins_per_octave=12,
+                n_fft=2048, hop_length=None, **kwargs):
+    """Shift the pitch of an audio signal by n_steps semitones.
+
+    Changes the pitch without changing the duration, using time
+    stretching followed by resampling.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1-D).
+    sr : int
+        Sample rate. Default: 22050.
+    n_steps : float
+        Number of steps to shift. Positive shifts pitch up,
+        negative shifts pitch down. Default: 0.
+    bins_per_octave : int
+        Number of steps per octave. Default: 12 (semitones).
+    n_fft : int
+        FFT size for the phase vocoder. Default: 2048.
+    hop_length : int or None
+        Hop length for the phase vocoder. Default: n_fft // 4.
+
+    Returns
+    -------
+    np.ndarray
+        Pitch-shifted audio signal (1-D), same length as input.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_hop = int(hop_length) if hop_length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_pitch_shift(
+            ctx, signal_ptr, len(y),
+            sr, float(n_steps),
+            bins_per_octave, n_fft, c_hop,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_pitch_shift failed with status {status}")
 
         result = buffer_to_numpy(out)
         return result.ravel()

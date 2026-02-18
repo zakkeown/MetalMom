@@ -274,6 +274,12 @@ ffi.cdef("""
                             int32_t n_fft, int32_t hop_length,
                             MMBuffer* out);
 
+    /* Pitch Shifting */
+    int32_t mm_pitch_shift(mm_context ctx, const float* signal_data, int64_t signal_length,
+                           int32_t sample_rate, float n_steps,
+                           int32_t bins_per_octave, int32_t n_fft, int32_t hop_length,
+                           MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

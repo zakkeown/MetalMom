@@ -2009,6 +2009,44 @@ public func mm_time_stretch(
     return fillBuffer(result, out)
 }
 
+// MARK: - Pitch Shifting
+
+@_cdecl("mm_pitch_shift")
+public func mm_pitch_shift(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nSteps: Float,
+    _ binsPerOctave: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+
+    let result = PitchShift.pitchShift(
+        signal: signal,
+        sr: Int(sampleRate),
+        nSteps: nSteps,
+        binsPerOctave: Int(binsPerOctave),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
