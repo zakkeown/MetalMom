@@ -3227,6 +3227,34 @@ public func mm_dtw(
     return fillBuffer(result.accumulatedCost, out)
 }
 
+// MARK: - Agglomerative Segmentation
+
+@_cdecl("mm_agglomerative")
+public func mm_agglomerative(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ nFeatures: Int32,
+    _ nFrames: Int32,
+    _ nSegments: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, shape: [Int(nFeatures), Int(nFrames)], sampleRate: 0)
+
+    let boundaries = Clustering.agglomerative(features: signal, nSegments: Int(nSegments))
+
+    let result = Signal(data: boundaries.map { Float($0) },
+                        shape: [boundaries.count],
+                        sampleRate: 0)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

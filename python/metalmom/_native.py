@@ -444,6 +444,11 @@ ffi.cdef("""
                    int32_t step_pattern, int32_t band_width,
                    MMBuffer* out);
 
+    /* Agglomerative Segmentation */
+    int32_t mm_agglomerative(mm_context ctx, const float* data, int64_t count,
+                              int32_t n_features, int32_t n_frames,
+                              int32_t n_segments, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

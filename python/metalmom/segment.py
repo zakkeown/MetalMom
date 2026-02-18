@@ -398,6 +398,62 @@ def _dtw_backtrack(D):
     return path
 
 
+def agglomerative(features, n_segments):
+    """Agglomerative temporal segmentation.
+
+    Merges adjacent segments bottom-up (by Euclidean distance between
+    centroids) until the target number of segments is reached.
+
+    Parameters
+    ----------
+    features : np.ndarray
+        Feature matrix, shape (n_features, n_frames).
+    n_segments : int
+        Target number of segments.
+
+    Returns
+    -------
+    np.ndarray
+        Segment boundary frame indices, shape (n_segments + 1,).
+        Starts at 0 and ends at n_frames.
+    """
+    if features is None:
+        raise ValueError("features must be provided")
+
+    features = np.ascontiguousarray(features, dtype=np.float32)
+    if features.ndim != 2:
+        raise ValueError(f"features must be 2D, got {features.ndim}D")
+
+    n_features, n_frames = features.shape
+    if n_features == 0 or n_frames == 0:
+        raise ValueError("features dimensions must be positive")
+
+    if n_segments < 1:
+        raise ValueError("n_segments must be >= 1")
+
+    data_ptr = ffi.cast("const float*", features.ctypes.data)
+    count = int(n_features * n_frames)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        rc = lib.mm_agglomerative(
+            ctx, data_ptr, count,
+            int(n_features), int(n_frames),
+            int(n_segments), out,
+        )
+        if rc != 0:
+            raise RuntimeError(f"mm_agglomerative failed with code {rc}")
+
+        boundaries = buffer_to_numpy(out)
+        return boundaries.astype(np.int64)
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def _extract_lines(arr, min_length, out_list):
     """Extract line lengths from a binary 1D array."""
     current = 0
