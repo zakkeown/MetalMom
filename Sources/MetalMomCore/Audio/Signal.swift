@@ -2,7 +2,7 @@ import Accelerate
 import Foundation
 
 /// Distinguishes real-valued from complex-valued signal data.
-public enum SignalDType: Equatable {
+public enum SignalDType: Equatable, Sendable {
     case float32      // Real-valued: N floats
     case complex64    // Complex-valued: 2N floats (interleaved real, imag, real, imag, ...)
 }

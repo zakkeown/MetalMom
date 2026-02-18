@@ -2,7 +2,7 @@ import Accelerate
 import Foundation
 
 /// Strategies for merging overlapping regions between adjacent chunks.
-public enum MergeStrategy {
+public enum MergeStrategy: Sendable {
     /// Linear crossfade in the overlap region (default).
     /// Left chunk fades out linearly, right chunk fades in linearly.
     case overlapAdd
@@ -13,7 +13,7 @@ public enum MergeStrategy {
 }
 
 /// Errors specific to chunked inference.
-public enum ChunkedInferenceError: Error, Equatable {
+public enum ChunkedInferenceError: Error, Equatable, Sendable {
     /// chunkSize must be > 0.
     case invalidChunkSize(Int)
     /// hopSize must be > 0 and <= chunkSize.

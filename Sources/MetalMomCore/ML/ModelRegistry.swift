@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Errors
 
 /// Errors that can occur when using the model registry.
-public enum ModelRegistryError: Error, Equatable {
+public enum ModelRegistryError: Error, Equatable, Sendable {
     /// The registry has not been configured with a models directory.
     case notConfigured
     /// No model with the given name was found in the models directory.

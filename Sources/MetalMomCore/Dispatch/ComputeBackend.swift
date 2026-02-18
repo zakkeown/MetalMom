@@ -1,7 +1,7 @@
 import Foundation
 
 /// Identifies which compute backend to use.
-public enum BackendType: Equatable {
+public enum BackendType: Equatable, Sendable {
     case accelerate
     case metal
 }

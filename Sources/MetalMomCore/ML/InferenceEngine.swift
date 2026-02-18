@@ -4,7 +4,7 @@ import Foundation
 // MARK: - Errors
 
 /// Errors that can occur during CoreML inference.
-public enum InferenceError: Error, Equatable {
+public enum InferenceError: Error, Equatable, Sendable {
     /// The requested output feature was not found in model predictions.
     case missingOutput(String)
     /// The model file could not be loaded or is invalid.

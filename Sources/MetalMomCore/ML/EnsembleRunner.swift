@@ -5,7 +5,7 @@ import Foundation
 // MARK: - Errors
 
 /// Errors specific to ensemble inference.
-public enum EnsembleError: Error, Equatable {
+public enum EnsembleError: Error, Equatable, Sendable {
     /// No engines were provided (ensemble must have at least 1 model).
     case emptyEnsemble
     /// Model outputs have mismatched shapes across the ensemble.
@@ -22,7 +22,7 @@ public enum EnsembleError: Error, Equatable {
 public final class EnsembleRunner {
 
     /// Strategy for combining ensemble outputs.
-    public enum CombineStrategy {
+    public enum CombineStrategy: Sendable {
         /// Average all model outputs element-wise (default for beat/onset).
         case mean
         /// Take the median across models for each element.
