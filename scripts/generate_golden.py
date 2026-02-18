@@ -147,6 +147,15 @@ np.save(os.path.join(GOLDEN_DIR, "delta_delta.npy"), delta_delta)
 stack_mem = librosa.feature.stack_memory(mfcc_for_delta, n_steps=3)
 np.save(os.path.join(GOLDEN_DIR, "stack_memory.npy"), stack_mem)
 
+# ── Poly features golden files ──
+# Compute from magnitude STFT
+S_for_poly = np.abs(librosa.stft(signal_440, n_fft=2048, hop_length=512))
+poly_default = librosa.feature.poly_features(S=S_for_poly, order=1)
+np.save(os.path.join(GOLDEN_DIR, "poly_features_440hz_default.npy"), poly_default)
+
+poly_order2 = librosa.feature.poly_features(S=S_for_poly, order=2)
+np.save(os.path.join(GOLDEN_DIR, "poly_features_440hz_order2.npy"), poly_order2)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -175,4 +184,6 @@ print(f"mfcc_for_delta shape: {mfcc_for_delta.shape}, range: [{mfcc_for_delta.mi
 print(f"delta_default shape: {delta_default.shape}, range: [{delta_default.min():.6f}, {delta_default.max():.6f}]")
 print(f"delta_delta shape: {delta_delta.shape}, range: [{delta_delta.min():.6f}, {delta_delta.max():.6f}]")
 print(f"stack_mem shape: {stack_mem.shape}")
+print(f"poly_default shape: {poly_default.shape}, range: [{poly_default.min():.6f}, {poly_default.max():.6f}]")
+print(f"poly_order2 shape: {poly_order2.shape}, range: [{poly_order2.min():.6f}, {poly_order2.max():.6f}]")
 print(f"Golden files saved to {GOLDEN_DIR}")

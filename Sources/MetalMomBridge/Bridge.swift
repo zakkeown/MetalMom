@@ -962,6 +962,32 @@ public func mm_stack_memory(
     return fillBuffer(result, out)
 }
 
+// MARK: - Poly Features
+
+@_cdecl("mm_poly_features")
+public func mm_poly_features(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ nFeatures: Int32,
+    _ nFrames: Int32,
+    _ order: Int32,
+    _ sr: Int32,
+    _ nFFT: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, shape: [Int(nFeatures), Int(nFrames)], sampleRate: 0)
+
+    let result = PolyFeatures.compute(data: signal, order: Int(order), sr: Int(sr), nFFT: Int(nFFT))
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

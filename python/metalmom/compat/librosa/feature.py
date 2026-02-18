@@ -5,5 +5,5 @@ from metalmom.feature import (
     spectral_centroid, spectral_bandwidth, spectral_contrast,
     spectral_rolloff, spectral_flatness,
     rms, zero_crossing_rate, tonnetz,
-    delta, stack_memory,
+    delta, stack_memory, poly_features,
 )

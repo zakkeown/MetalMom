@@ -114,6 +114,12 @@ int32_t mm_stack_memory(mm_context ctx, const float* data, int64_t count,
                         int32_t n_features, int32_t n_frames,
                         int32_t n_steps, int32_t delay, MMBuffer* out);
 
+/* Poly Features */
+int32_t mm_poly_features(mm_context ctx, const float* data, int64_t count,
+                          int32_t n_features, int32_t n_frames,
+                          int32_t order, int32_t sr, int32_t n_fft,
+                          MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

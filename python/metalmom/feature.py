@@ -985,6 +985,74 @@ def _normalize_frames(chroma, norm=2.0):
     return chroma
 
 
+def poly_features(S=None, y=None, sr=22050, n_fft=2048, hop_length=None,
+                   win_length=None, center=True, order=1, **kwargs):
+    """Compute polynomial features from a spectrogram.
+
+    For each frame, fits a polynomial of given order to the frequency axis
+    and returns the coefficients in descending power order.
+
+    Parameters
+    ----------
+    S : np.ndarray or None
+        Pre-computed spectrogram, shape (n_freqs, n_frames).
+    y : np.ndarray or None
+        Audio signal. If S is None, computes STFT magnitude first.
+    sr : int
+        Sample rate. Default: 22050.
+    n_fft : int
+        FFT window size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: 512.
+    win_length : int or None
+        Window length. Default: n_fft.
+    center : bool
+        Centre-pad signal. Default: True.
+    order : int
+        Polynomial order. Default: 1.
+
+    Returns
+    -------
+    np.ndarray
+        Polynomial coefficients, shape (order+1, n_frames).
+    """
+    if S is None:
+        if y is None:
+            raise ValueError("Either y or S must be provided")
+        from .core import stft
+        hop = hop_length if hop_length is not None else 512
+        win = win_length if win_length is not None else n_fft
+        S = np.abs(stft(y, n_fft=n_fft, hop_length=hop, win_length=win, center=center))
+
+    S = np.ascontiguousarray(S, dtype=np.float32)
+    n_features, n_frames = S.shape
+    flat = S.ravel()
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        data_ptr = ffi.cast("const float*", flat.ctypes.data)
+
+        # Infer n_fft from spectrogram shape: n_freqs = n_fft // 2 + 1
+        inferred_n_fft = (n_features - 1) * 2
+
+        status = lib.mm_poly_features(
+            ctx, data_ptr, len(flat),
+            n_features, n_frames,
+            order, sr, inferred_n_fft,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_poly_features failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def delta(data, width=9, order=1, axis=-1, **kwargs):
     """Compute delta (derivative) features.
 
