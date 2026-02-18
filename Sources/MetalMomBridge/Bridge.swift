@@ -793,6 +793,78 @@ public func mm_spectral_flatness(
     return fillBuffer(result, out)
 }
 
+// MARK: - RMS Energy
+
+@_cdecl("mm_rms")
+public func mm_rms(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ frameLength: Int32,
+    _ hopLength: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let result = RMS.compute(
+        signal: signal,
+        frameLength: Int(frameLength),
+        hopLength: Int(hopLength),
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - Zero-Crossing Rate
+
+@_cdecl("mm_zero_crossing_rate")
+public func mm_zero_crossing_rate(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ frameLength: Int32,
+    _ hopLength: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let result = ZeroCrossing.rate(
+        signal: signal,
+        frameLength: Int(frameLength),
+        hopLength: Int(hopLength),
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

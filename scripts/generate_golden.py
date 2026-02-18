@@ -114,6 +114,16 @@ np.save(os.path.join(GOLDEN_DIR, "spectral_rolloff_440hz_default.npy"), sc_rollo
 sc_flatness = librosa.feature.spectral_flatness(y=signal_440)
 np.save(os.path.join(GOLDEN_DIR, "spectral_flatness_440hz_default.npy"), sc_flatness)
 
+# ── RMS Energy golden files ──
+# Default params: frame_length=2048, hop_length=512, center=True
+rms_default = librosa.feature.rms(y=signal_440)
+np.save(os.path.join(GOLDEN_DIR, "rms_440hz_default.npy"), rms_default)
+
+# ── Zero-Crossing Rate golden files ──
+# Default params: frame_length=2048, hop_length=512, center=True
+zcr_default = librosa.feature.zero_crossing_rate(y=signal_440)
+np.save(os.path.join(GOLDEN_DIR, "zcr_440hz_default.npy"), zcr_default)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -135,4 +145,6 @@ print(f"spectral_bandwidth shape: {sc_bandwidth.shape}, range: [{sc_bandwidth.mi
 print(f"spectral_contrast shape: {sc_contrast.shape}, range: [{sc_contrast.min():.4f}, {sc_contrast.max():.4f}]")
 print(f"spectral_rolloff shape: {sc_rolloff.shape}, range: [{sc_rolloff.min():.4f}, {sc_rolloff.max():.4f}]")
 print(f"spectral_flatness shape: {sc_flatness.shape}, range: [{sc_flatness.min():.6f}, {sc_flatness.max():.6f}]")
+print(f"rms_default shape: {rms_default.shape}, range: [{rms_default.min():.6f}, {rms_default.max():.6f}]")
+print(f"zcr_default shape: {zcr_default.shape}, range: [{zcr_default.min():.6f}, {zcr_default.max():.6f}]")
 print(f"Golden files saved to {GOLDEN_DIR}")

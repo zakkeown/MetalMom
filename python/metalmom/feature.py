@@ -755,6 +755,109 @@ def spectral_flatness(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
         lib.mm_destroy(ctx)
 
 
+def rms(y=None, S=None, frame_length=2048, hop_length=512, center=True, **kwargs):
+    """Compute root-mean-square (RMS) energy.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    S : np.ndarray or None
+        Pre-computed spectrogram.  If provided, RMS is computed from the
+        spectrogram columns: ``RMS[t] = sqrt(mean(S[:, t]**2))``.
+    frame_length : int
+        Length of each analysis frame. Default: 2048.
+    hop_length : int
+        Hop length. Default: 512.
+    center : bool
+        Centre-pad signal before framing. Default: True.
+
+    Returns
+    -------
+    np.ndarray
+        RMS energy, shape ``(1, n_frames)``.
+    """
+    if S is not None:
+        # Pre-computed spectrogram path: RMS from columns
+        S = np.ascontiguousarray(S, dtype=np.float32)
+        rms_vals = np.sqrt(np.mean(S ** 2, axis=0, keepdims=True))
+        return rms_vals
+
+    if y is None:
+        raise ValueError("Either y or S must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_rms(
+            ctx, signal_ptr, len(y),
+            22050,  # sample_rate (not used by RMS, but required by bridge)
+            frame_length, hop_length,
+            1 if center else 0,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_rms failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def zero_crossing_rate(y, frame_length=2048, hop_length=512, center=True, **kwargs):
+    """Compute zero-crossing rate.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1D float32/float64 array).
+    frame_length : int
+        Length of each analysis frame. Default: 2048.
+    hop_length : int
+        Hop length. Default: 512.
+    center : bool
+        Centre-pad signal before framing. Default: True.
+
+    Returns
+    -------
+    np.ndarray
+        Zero-crossing rate, shape ``(1, n_frames)``.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_zero_crossing_rate(
+            ctx, signal_ptr, len(y),
+            22050,  # sample_rate (not used by ZCR, but required by bridge)
+            frame_length, hop_length,
+            1 if center else 0,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_zero_crossing_rate failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def _normalize_frames(chroma, norm=2.0):
     """Normalize each frame (column) of a chroma matrix.
 
