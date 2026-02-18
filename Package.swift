@@ -1,0 +1,34 @@
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "MetalMom",
+    platforms: [.macOS(.v14), .iOS(.v17)],
+    products: [
+        .library(name: "MetalMomCore", targets: ["MetalMomCore"]),
+        .library(name: "MetalMomBridge", type: .dynamic, targets: ["MetalMomBridge"]),
+    ],
+    targets: [
+        .target(
+            name: "MetalMomCBridge",
+            dependencies: [],
+            path: "Sources/MetalMomCBridge",
+            publicHeadersPath: "include"
+        ),
+        .target(
+            name: "MetalMomCore",
+            dependencies: ["MetalMomCBridge"],
+            path: "Sources/MetalMomCore"
+        ),
+        .target(
+            name: "MetalMomBridge",
+            dependencies: ["MetalMomCore"],
+            path: "Sources/MetalMomBridge"
+        ),
+        .testTarget(
+            name: "MetalMomTests",
+            dependencies: ["MetalMomCore"],
+            path: "Tests/MetalMomTests"
+        ),
+    ]
+)
