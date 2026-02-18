@@ -231,6 +231,13 @@ int32_t mm_pyin(mm_context ctx, const float* signal_data, int64_t signal_length,
                 float resolution, float switch_prob, int32_t center,
                 MMBuffer* out);
 
+/* Piptrack (Parabolic Interpolation Pitch Tracking) */
+int32_t mm_piptrack(mm_context ctx, const float* signal_data, int64_t signal_length,
+                    int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                    int32_t win_length, float f_min, float f_max,
+                    float threshold, int32_t center,
+                    MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

@@ -5,7 +5,7 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
-__all__ = ["yin", "pyin"]
+__all__ = ["yin", "pyin", "piptrack"]
 
 
 def yin(y, fmin, fmax, sr=22050, frame_length=2048, hop_length=None,
@@ -148,5 +148,80 @@ def pyin(y, fmin, fmax, sr=22050, frame_length=2048, hop_length=None,
             f0[~voiced_flag] = fill_na
 
         return f0, voiced_flag, voiced_probs
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def piptrack(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
+             fmin=150.0, fmax=4000.0, threshold=0.1, win_length=None,
+             center=True, **kwargs):
+    """Pitch tracking via parabolic interpolation of STFT peaks.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal. Required if S is not provided.
+    sr : int
+        Sample rate. Default: 22050.
+    S : np.ndarray or None
+        Pre-computed STFT magnitude. Not yet supported (reserved for future).
+    n_fft : int
+        FFT size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: n_fft // 4.
+    fmin : float
+        Minimum frequency in Hz. Default: 150.0.
+    fmax : float
+        Maximum frequency in Hz. Default: 4000.0.
+    threshold : float
+        Magnitude threshold relative to max. Default: 0.1.
+    win_length : int or None
+        Window length. Default: n_fft.
+    center : bool
+        Center-pad signal. Default: True.
+
+    Returns
+    -------
+    pitches : np.ndarray, shape (n_freqs, n_frames)
+        Pitch values in Hz (0 for non-peak bins).
+    magnitudes : np.ndarray, shape (n_freqs, n_frames)
+        Magnitude values (0 for non-peak bins).
+    """
+    if y is None and S is None:
+        raise ValueError("Either y or S must be provided")
+
+    if S is not None:
+        raise NotImplementedError("Pre-computed STFT (S) is not yet supported for piptrack")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_hop = int(hop_length) if hop_length is not None else 0
+    c_win = int(win_length) if win_length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_piptrack(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, c_hop, c_win,
+            float(fmin), float(fmax),
+            float(threshold),
+            1 if center else 0,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_piptrack failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        # result has shape [2 * n_freqs, n_frames]
+        n_freqs = n_fft // 2 + 1
+        pitches = result[:n_freqs]
+        magnitudes = result[n_freqs:]
+
+        return pitches, magnitudes
     finally:
         lib.mm_destroy(ctx)
