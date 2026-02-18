@@ -15,4 +15,4 @@ from .evaluate import onset_evaluate, beat_evaluate, tempo_evaluate, chord_accur
 from .onset import onset_strength, onset_detect
 from .beat import beat_track, plp
 from .pitch import yin, pyin, piptrack, estimate_tuning
-from .effects import hpss, harmonic, percussive, time_stretch, pitch_shift
+from .effects import hpss, harmonic, percussive, time_stretch, pitch_shift, trim

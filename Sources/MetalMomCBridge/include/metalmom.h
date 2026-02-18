@@ -276,6 +276,12 @@ int32_t mm_pitch_shift(mm_context ctx, const float* signal_data, int64_t signal_
                        int32_t bins_per_octave, int32_t n_fft, int32_t hop_length,
                        MMBuffer* out);
 
+/* Trim (Silence Trimming) */
+int32_t mm_trim(mm_context ctx, const float* signal_data, int64_t signal_length,
+                int32_t sample_rate, float top_db,
+                int32_t frame_length, int32_t hop_length,
+                MMBuffer* out, int64_t* out_start, int64_t* out_end);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

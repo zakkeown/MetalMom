@@ -2047,6 +2047,46 @@ public func mm_pitch_shift(
     return fillBuffer(result, out)
 }
 
+// MARK: - Trim (Silence Trimming)
+
+@_cdecl("mm_trim")
+public func mm_trim(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ topDb: Float,
+    _ frameLength: Int32,
+    _ hopLength: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?,
+    _ outStart: UnsafeMutablePointer<Int64>?,
+    _ outEnd: UnsafeMutablePointer<Int64>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out,
+          let outStart = outStart,
+          let outEnd = outEnd else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let (trimmed, startIdx, endIdx) = Trim.trim(
+        signal: signal,
+        topDb: topDb,
+        frameLength: Int(frameLength),
+        hopLength: Int(hopLength)
+    )
+
+    outStart.pointee = Int64(startIdx)
+    outEnd.pointee = Int64(endIdx)
+
+    return fillBuffer(trimmed, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
