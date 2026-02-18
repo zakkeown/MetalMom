@@ -1,3 +1,3 @@
 """librosa.pitch compatibility shim."""
 
-from metalmom.pitch import yin, pyin, piptrack
+from metalmom.pitch import yin, pyin, piptrack, estimate_tuning

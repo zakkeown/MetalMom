@@ -238,6 +238,13 @@ int32_t mm_piptrack(mm_context ctx, const float* signal_data, int64_t signal_len
                     float threshold, int32_t center,
                     MMBuffer* out);
 
+/* Tuning Estimation */
+int32_t mm_estimate_tuning(mm_context ctx, const float* signal_data, int64_t signal_length,
+                           int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                           int32_t win_length, float resolution,
+                           int32_t bins_per_octave, int32_t center,
+                           float* out_tuning);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

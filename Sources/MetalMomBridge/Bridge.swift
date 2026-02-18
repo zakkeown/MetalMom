@@ -1771,6 +1771,52 @@ public func mm_piptrack(
     return fillBuffer(result, out)
 }
 
+// MARK: - Tuning Estimation
+
+@_cdecl("mm_estimate_tuning")
+public func mm_estimate_tuning(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ resolution: Float,
+    _ binsPerOctave: Int32,
+    _ center: Int32,
+    _ outTuning: UnsafeMutablePointer<Float>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let outTuning = outTuning else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    // hopLength <= 0 means use default (nFFT/4)
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    // winLength <= 0 means use default (nFFT)
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let tuning = Tuning.estimateTuning(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        resolution: resolution,
+        binsPerOctave: Int(binsPerOctave),
+        center: center != 0
+    )
+
+    outTuning.pointee = tuning
+    return MM_OK
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

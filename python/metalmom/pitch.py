@@ -5,7 +5,7 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
-__all__ = ["yin", "pyin", "piptrack"]
+__all__ = ["yin", "pyin", "piptrack", "estimate_tuning"]
 
 
 def yin(y, fmin, fmax, sr=22050, frame_length=2048, hop_length=None,
@@ -223,5 +223,70 @@ def piptrack(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
         magnitudes = result[n_freqs:]
 
         return pitches, magnitudes
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def estimate_tuning(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
+                    resolution=0.01, bins_per_octave=12, center=True,
+                    win_length=None, **kwargs):
+    """Estimate tuning deviation from A440.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal. Required if S is not provided.
+    sr : int
+        Sample rate. Default: 22050.
+    S : np.ndarray or None
+        Pre-computed STFT magnitude. Not yet supported (reserved for future).
+    n_fft : int
+        FFT size. Default: 2048.
+    hop_length : int or None
+        Hop length. Default: n_fft // 4.
+    resolution : float
+        Histogram bin width in fractions of a semitone. Default: 0.01.
+    bins_per_octave : int
+        Number of bins per octave. Default: 12.
+    center : bool
+        Center-pad signal. Default: True.
+    win_length : int or None
+        Window length. Default: n_fft.
+
+    Returns
+    -------
+    float
+        Estimated tuning offset in fractions of a bin.
+    """
+    if y is None and S is None:
+        raise ValueError("Either y or S must be provided")
+
+    if S is not None:
+        raise NotImplementedError("Pre-computed STFT (S) is not yet supported for estimate_tuning")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_hop = int(hop_length) if hop_length is not None else 0
+    c_win = int(win_length) if win_length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out_tuning = ffi.new("float*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_estimate_tuning(
+            ctx, signal_ptr, len(y),
+            sr, n_fft, c_hop, c_win,
+            float(resolution),
+            bins_per_octave,
+            1 if center else 0,
+            out_tuning,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_estimate_tuning failed with status {status}")
+
+        return float(out_tuning[0])
     finally:
         lib.mm_destroy(ctx)
