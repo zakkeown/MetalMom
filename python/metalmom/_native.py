@@ -378,6 +378,10 @@ ffi.cdef("""
                            int32_t n_freqs, int32_t n_frames, int32_t sample_rate,
                            int32_t n_iter, int32_t hop_length, int32_t win_length,
                            int32_t center, int64_t output_length, MMBuffer* out);
+    int32_t mm_griffinlim_cqt(mm_context ctx, const float* mag_data, int64_t mag_count,
+                               int32_t n_bins, int32_t n_frames, int32_t sample_rate,
+                               int32_t n_iter, int32_t hop_length,
+                               float f_min, int32_t bins_per_octave, MMBuffer* out);
 
     /* PCEN (Per-Channel Energy Normalization) */
     int32_t mm_pcen(mm_context ctx, const float* data, int64_t count,

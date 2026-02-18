@@ -337,20 +337,10 @@ def test_piano_transcribe_notes():
 # 7. griffinlim_cqt -- CQT magnitude inversion roundtrip
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(
-    reason="mm_griffinlim_cqt not declared in cffi _native.py definitions",
-    raises=AttributeError,
-    strict=True,
-)
 def test_griffinlim_cqt_roundtrip():
     """Generate a 1s 440Hz sine, compute CQT, invert with griffinlim_cqt.
 
     Verify: output is 1D, finite, non-empty float32 array.
-
-    Note: Currently xfail because the mm_griffinlim_cqt bridge symbol is
-    implemented in Swift (Bridge.swift) and declared in metalmom.h, but the
-    cffi definition in _native.py is missing. Remove xfail after adding the
-    cffi declaration.
     """
     np.random.seed(42)
     sr = 22050
