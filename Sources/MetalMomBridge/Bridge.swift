@@ -2476,6 +2476,146 @@ public func mm_piano_transcribe(
     return fillBuffer(result, out)
 }
 
+// MARK: - CQT (Constant-Q Transform)
+
+@_cdecl("mm_cqt")
+public func mm_cqt(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ binsPerOctave: Int32,
+    _ nFFT: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+    let nFFTOpt: Int? = nFFT > 0 ? Int(nFFT) : nil
+
+    let result = CQT.compute(
+        signal: signal,
+        hopLength: hopOpt,
+        fMin: fMin,
+        fMax: fMaxOpt,
+        binsPerOctave: Int(binsPerOctave),
+        nFFT: nFFTOpt,
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - VQT (Variable-Q Transform)
+
+@_cdecl("mm_vqt")
+public func mm_vqt(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ binsPerOctave: Int32,
+    _ gamma: Float,
+    _ nFFT: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+    let nFFTOpt: Int? = nFFT > 0 ? Int(nFFT) : nil
+
+    let result = CQT.vqt(
+        signal: signal,
+        hopLength: hopOpt,
+        fMin: fMin,
+        fMax: fMaxOpt,
+        binsPerOctave: Int(binsPerOctave),
+        gamma: gamma,
+        nFFT: nFFTOpt,
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - Hybrid CQT
+
+@_cdecl("mm_hybrid_cqt")
+public func mm_hybrid_cqt(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ binsPerOctave: Int32,
+    _ nFFT: Int32,
+    _ center: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+    let nFFTOpt: Int? = nFFT > 0 ? Int(nFFT) : nil
+
+    let result = CQT.hybridCQT(
+        signal: signal,
+        hopLength: hopOpt,
+        fMin: fMin,
+        fMax: fMaxOpt,
+        binsPerOctave: Int(binsPerOctave),
+        nFFT: nFFTOpt,
+        center: center != 0
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

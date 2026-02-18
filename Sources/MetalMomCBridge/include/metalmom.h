@@ -341,6 +341,24 @@ int32_t mm_piano_transcribe(mm_context ctx,
                              int32_t use_hmm,
                              MMBuffer* out);
 
+/* CQT (Constant-Q Transform) */
+int32_t mm_cqt(mm_context ctx, const float* signal_data, int64_t signal_length,
+               int32_t sample_rate, int32_t hop_length,
+               float f_min, float f_max, int32_t bins_per_octave,
+               int32_t n_fft, int32_t center, MMBuffer* out);
+
+/* VQT (Variable-Q Transform) */
+int32_t mm_vqt(mm_context ctx, const float* signal_data, int64_t signal_length,
+               int32_t sample_rate, int32_t hop_length,
+               float f_min, float f_max, int32_t bins_per_octave,
+               float gamma, int32_t n_fft, int32_t center, MMBuffer* out);
+
+/* Hybrid CQT */
+int32_t mm_hybrid_cqt(mm_context ctx, const float* signal_data, int64_t signal_length,
+                       int32_t sample_rate, int32_t hop_length,
+                       float f_min, float f_max, int32_t bins_per_octave,
+                       int32_t n_fft, int32_t center, MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

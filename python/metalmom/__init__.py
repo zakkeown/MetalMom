@@ -19,3 +19,4 @@ from .effects import hpss, harmonic, percussive, time_stretch, pitch_shift, trim
 from .key import key_detect
 from .chord import chord_detect
 from .transcribe import piano_transcribe
+from .cqt import cqt, vqt, hybrid_cqt
