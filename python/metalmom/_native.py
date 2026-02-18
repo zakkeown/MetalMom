@@ -1,1 +1,58 @@
 """Native library loader (cffi dlopen)."""
+
+import os
+import cffi
+
+ffi = cffi.FFI()
+
+# C declarations matching metalmom.h
+ffi.cdef("""
+    /* Status codes */
+    #define MM_OK 0
+    #define MM_ERR_INVALID_INPUT -1
+    #define MM_ERR_METAL_UNAVAILABLE -2
+    #define MM_ERR_ALLOC_FAILED -3
+
+    /* Buffer type: holds data + shape for NumPy interop */
+    typedef struct {
+        float* data;
+        int64_t shape[8];   /* max 8 dimensions */
+        int32_t ndim;
+        int32_t dtype;      /* 0=float32 */
+        int64_t count;      /* total element count */
+    } MMBuffer;
+
+    /* STFT parameters */
+    typedef struct {
+        int32_t n_fft;
+        int32_t hop_length;
+        int32_t win_length;
+        int32_t center;     /* bool: 1=true, 0=false */
+    } MMSTFTParams;
+
+    /* Opaque context handle */
+    typedef void* mm_context;
+
+    /* Lifecycle */
+    mm_context mm_init(void);
+    void mm_destroy(mm_context ctx);
+
+    /* STFT */
+    int32_t mm_stft(mm_context ctx, const float* signal_data, int64_t signal_length,
+                    int32_t sample_rate, const MMSTFTParams* params, MMBuffer* out);
+
+    /* Memory */
+    void mm_buffer_free(MMBuffer* buf);
+""")
+
+# Load the dynamic library
+_lib_dir = os.path.join(os.path.dirname(__file__), "_lib")
+_dylib_path = os.path.join(_lib_dir, "libmetalmom.dylib")
+
+if not os.path.exists(_dylib_path):
+    raise RuntimeError(
+        f"MetalMom dylib not found at {_dylib_path}. "
+        "Run ./scripts/build_dylib.sh first."
+    )
+
+lib = ffi.dlopen(_dylib_path)
