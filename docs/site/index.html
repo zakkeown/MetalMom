@@ -13,7 +13,7 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Karla:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <!-- Styles -->
   <link rel="stylesheet" href="css/style.css">
@@ -49,20 +49,73 @@
        Hero
        ============================================================ -->
   <section class="hero" id="hero">
-    <div class="hero-content">
-      <h1 class="hero-title">MetalMom</h1>
-      <p class="hero-subtitle">GPU-accelerated audio analysis for Python on Apple Silicon</p>
-      <p class="hero-tagline">Drop-in replacement for librosa. 2-3x faster. Mom knows best.</p>
+    <div class="container">
+      <div class="hero-layout">
+        <div class="hero-text">
+          <div class="hero-tag">GPU-Accelerated Audio Analysis</div>
+          <h1 class="hero-title">MetalMom</h1>
+          <p class="hero-desc">Drop-in replacement for librosa on Apple Silicon. Metal shaders. Accelerate framework. 2&ndash;3x faster. Zero configuration.</p>
 
-      <div class="hero-ctas">
-        <a href="getting-started.html" class="btn btn-primary">Get Started</a>
-        <a href="https://metalmom.readthedocs.io/" target="_blank" rel="noopener" class="btn btn-secondary">API Reference</a>
-      </div>
+          <div class="install-command">
+            <span class="prompt">$</span>
+            <span class="cmd">pip install metalmom</span>
+            <button class="copy-btn" aria-label="Copy install command">Copy</button>
+          </div>
 
-      <div class="install-command">
-        <span class="prompt">$</span>
-        <span class="cmd">pip install metalmom</span>
-        <button class="copy-btn" aria-label="Copy install command">Copy</button>
+          <div class="hero-actions">
+            <a href="getting-started.html">Get Started &rarr;</a>
+            <a href="migration-librosa.html">Migration Guide</a>
+          </div>
+        </div>
+
+        <div class="hero-viz" aria-hidden="true">
+          <span style="--d:0s; height:18%"></span>
+          <span style="--d:0.12s; height:35%"></span>
+          <span style="--d:0.06s; height:55%"></span>
+          <span style="--d:0.18s; height:72%"></span>
+          <span style="--d:0.03s; height:90%"></span>
+          <span style="--d:0.15s; height:100%"></span>
+          <span style="--d:0.09s; height:85%"></span>
+          <span style="--d:0.21s; height:65%"></span>
+          <span style="--d:0.04s; height:95%"></span>
+          <span style="--d:0.16s; height:78%"></span>
+          <span style="--d:0.08s; height:60%"></span>
+          <span style="--d:0.2s; height:42%"></span>
+          <span style="--d:0.13s; height:80%"></span>
+          <span style="--d:0.02s; height:92%"></span>
+          <span style="--d:0.17s; height:70%"></span>
+          <span style="--d:0.07s; height:50%"></span>
+          <span style="--d:0.22s; height:88%"></span>
+          <span style="--d:0.11s; height:63%"></span>
+          <span style="--d:0.05s; height:75%"></span>
+          <span style="--d:0.19s; height:98%"></span>
+          <span style="--d:0.01s; height:82%"></span>
+          <span style="--d:0.14s; height:45%"></span>
+          <span style="--d:0.1s; height:68%"></span>
+          <span style="--d:0.23s; height:55%"></span>
+          <span style="--d:0.06s; height:38%"></span>
+          <span style="--d:0.18s; height:72%"></span>
+          <span style="--d:0.03s; height:90%"></span>
+          <span style="--d:0.15s; height:60%"></span>
+          <span style="--d:0.09s; height:85%"></span>
+          <span style="--d:0.21s; height:48%"></span>
+          <span style="--d:0.04s; height:95%"></span>
+          <span style="--d:0.16s; height:65%"></span>
+          <span style="--d:0.08s; height:78%"></span>
+          <span style="--d:0.2s; height:40%"></span>
+          <span style="--d:0.13s; height:58%"></span>
+          <span style="--d:0.02s; height:88%"></span>
+          <span style="--d:0.17s; height:75%"></span>
+          <span style="--d:0.07s; height:92%"></span>
+          <span style="--d:0.22s; height:50%"></span>
+          <span style="--d:0.11s; height:70%"></span>
+          <span style="--d:0.05s; height:82%"></span>
+          <span style="--d:0.19s; height:35%"></span>
+          <span style="--d:0.01s; height:62%"></span>
+          <span style="--d:0.14s; height:45%"></span>
+          <span style="--d:0.1s; height:28%"></span>
+          <span style="--d:0.23s; height:15%"></span>
+        </div>
       </div>
     </div>
   </section>
@@ -110,7 +163,7 @@
   </section>
 
   <!-- ============================================================
-       Features
+       Features (editorial numbered list)
        ============================================================ -->
   <section class="features" id="features">
     <div class="container">
@@ -118,66 +171,41 @@
         <h2>Heavy metal, light footprint</h2>
       </div>
 
-      <div class="features-grid">
-        <!-- GPU Accelerated -->
-        <div class="feature-card">
-          <div class="feature-icon gpu" aria-hidden="true">&#9889;</div>
-          <h3>GPU Accelerated</h3>
-          <p>Metal shaders and Accelerate framework on Apple Silicon. Smart dispatch routes to the fastest backend &mdash; because Mom always knows the fastest way.</p>
+      <div class="feature-list">
+        <div class="feature-item">
+          <span class="feature-num">01</span>
+          <div class="feature-body">
+            <h3>GPU Accelerated</h3>
+            <p>Metal shaders and Accelerate framework on Apple Silicon. Smart dispatch routes each operation to the fastest backend. STFT, mel spectrogram, MFCC &mdash; all running on the GPU.</p>
+          </div>
         </div>
 
-        <!-- librosa Compatible -->
-        <div class="feature-card">
-          <div class="feature-icon compat" aria-hidden="true">&#9901;</div>
-          <h3>librosa Compatible</h3>
-          <p>120+ functions with matching signatures. Your existing code works unchanged. Full compat shim included.</p>
+        <div class="feature-item">
+          <span class="feature-num">02</span>
+          <div class="feature-body">
+            <h3>librosa Compatible</h3>
+            <p>120+ functions with matching signatures. Your existing code works unchanged &mdash; just swap the import. Full compat shim means zero migration effort.</p>
+          </div>
         </div>
 
-        <!-- Neural Features -->
-        <div class="feature-card">
-          <div class="feature-icon neural" aria-hidden="true">&#10047;</div>
-          <h3>Neural Features</h3>
-          <p>67 CoreML models converted from madmom. Beat tracking, onset detection, chord recognition, piano transcription &mdash; all GPU-accelerated.</p>
+        <div class="feature-item">
+          <span class="feature-num">03</span>
+          <div class="feature-body">
+            <h3>Neural Features</h3>
+            <p>67 CoreML models converted from madmom. Beat tracking, onset detection, chord recognition, piano transcription. All GPU-accelerated through CoreML inference.</p>
+          </div>
         </div>
 
-        <!-- Type Safe -->
-        <div class="feature-card">
-          <div class="feature-icon types" aria-hidden="true">&#10003;</div>
-          <h3>Type Safe</h3>
-          <p>Complete PEP 561 type stubs for all 18 modules. Full IDE support, mypy-clean, modern Python.</p>
+        <div class="feature-item">
+          <span class="feature-num">04</span>
+          <div class="feature-body">
+            <h3>Type Safe</h3>
+            <p>Complete PEP 561 type stubs for all 18 modules. Full IDE autocomplete, mypy-clean, modern Python. 2,295 tests. Zero failures.</p>
+          </div>
         </div>
       </div>
     </div>
   </section>
-
-  <!-- Spectrogram divider -->
-  <hr class="spectrogram-divider">
-
-  <!-- ============================================================
-       Stats Bar
-       ============================================================ -->
-  <div class="stats-bar">
-    <div class="container">
-      <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-number">120+</div>
-          <div class="stat-label">Functions</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-number">67</div>
-          <div class="stat-label">CoreML Models</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-number">2,295</div>
-          <div class="stat-label">Tests</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-number">2-3x</div>
-          <div class="stat-label">Faster</div>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- ============================================================
        Footer
