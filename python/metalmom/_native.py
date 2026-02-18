@@ -331,6 +331,13 @@ ffi.cdef("""
                            int32_t* out_key_index, float* out_confidence,
                            MMBuffer* out_probabilities);
 
+    /* Chord Recognition */
+    int32_t mm_chord_detect(mm_context ctx,
+                             const float* activations, int32_t n_frames,
+                             int32_t n_classes, const float* transition_scores,
+                             float self_transition_bias,
+                             MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

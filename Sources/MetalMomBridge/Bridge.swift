@@ -2364,6 +2364,60 @@ public func mm_key_detect(
     return fillBuffer(probSignal, outProbabilities)
 }
 
+// MARK: - Chord Recognition
+
+@_cdecl("mm_chord_detect")
+public func mm_chord_detect(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ activations: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ nClasses: Int32,
+    _ transitionScores: UnsafePointer<Float>?,
+    _ selfTransitionBias: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let activations = activations,
+          nFrames > 0,
+          nClasses > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let totalCount = Int(nFrames) * Int(nClasses)
+    let actArray = Array(UnsafeBufferPointer(start: activations, count: totalCount))
+
+    var transArray: [Float]? = nil
+    if let ts = transitionScores {
+        let transCount = Int(nClasses) * Int(nClasses)
+        transArray = Array(UnsafeBufferPointer(start: ts, count: transCount))
+    }
+
+    let events = ChordRecognition.decode(
+        activations: actArray,
+        nFrames: Int(nFrames),
+        nClasses: Int(nClasses),
+        transitionScores: transArray,
+        selfTransitionBias: selfTransitionBias
+    )
+
+    let nEvents = events.count
+    if nEvents == 0 {
+        let emptySignal = Signal(data: [], shape: [0, 3], sampleRate: 0)
+        return fillBuffer(emptySignal, out)
+    }
+
+    // Pack as [nEvents, 3] float array: (startFrame, endFrame, chordIndex)
+    var flatData = [Float](repeating: 0, count: nEvents * 3)
+    for (i, event) in events.enumerated() {
+        flatData[i * 3 + 0] = Float(event.startFrame)
+        flatData[i * 3 + 1] = Float(event.endFrame)
+        flatData[i * 3 + 2] = Float(event.chordIndex)
+    }
+
+    let result = Signal(data: flatData, shape: [nEvents, 3], sampleRate: 0)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
