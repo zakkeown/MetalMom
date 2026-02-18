@@ -286,6 +286,12 @@ ffi.cdef("""
                     int32_t frame_length, int32_t hop_length,
                     MMBuffer* out, int64_t* out_start, int64_t* out_end);
 
+    /* Split (Non-Silent Interval Detection) */
+    int32_t mm_split(mm_context ctx, const float* signal_data, int64_t signal_length,
+                     int32_t sample_rate, float top_db,
+                     int32_t frame_length, int32_t hop_length,
+                     MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

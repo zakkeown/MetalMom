@@ -5,7 +5,7 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
-__all__ = ["hpss", "harmonic", "percussive", "time_stretch", "pitch_shift", "trim"]
+__all__ = ["hpss", "harmonic", "percussive", "time_stretch", "pitch_shift", "trim", "split"]
 
 
 def hpss(y, kernel_size=31, power=2.0, margin=1.0,
@@ -358,5 +358,62 @@ def trim(y, top_db=60, ref=None, frame_length=2048, hop_length=512, **kwargs):
 
         result = buffer_to_numpy(out)
         return result.ravel(), (start_idx, end_idx)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def split(y, top_db=60, ref=None, frame_length=2048, hop_length=512, **kwargs):
+    """Split audio into non-silent intervals.
+
+    Detects contiguous non-silent regions in an audio signal based on
+    a dB threshold relative to the peak RMS energy, matching the
+    behavior of ``librosa.effects.split``.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1-D).
+    top_db : float
+        Threshold in dB below the peak RMS. Frames with energy
+        below ``peak - top_db`` are considered silence. Default: 60.
+    ref : ignored
+        Accepted for librosa API compatibility but not used.
+    frame_length : int
+        Length of each analysis frame. Default: 2048.
+    hop_length : int
+        Number of samples between successive frames. Default: 512.
+
+    Returns
+    -------
+    np.ndarray, shape (n_intervals, 2)
+        Each row is [start_sample, end_sample].
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_split(
+            ctx, signal_ptr, len(y),
+            22050,  # sample_rate (not used in algorithm, but required by bridge)
+            float(top_db),
+            int(frame_length), int(hop_length),
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_split failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        if result.size == 0:
+            return np.empty((0, 2), dtype=result.dtype)
+        return result.reshape(-1, 2)
     finally:
         lib.mm_destroy(ctx)

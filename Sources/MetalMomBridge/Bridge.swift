@@ -2087,6 +2087,54 @@ public func mm_trim(
     return fillBuffer(trimmed, out)
 }
 
+// MARK: - Split (Non-Silent Interval Detection)
+
+@_cdecl("mm_split")
+public func mm_split(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ topDb: Float,
+    _ frameLength: Int32,
+    _ hopLength: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let intervals = Split.split(
+        signal: signal,
+        topDb: topDb,
+        frameLength: Int(frameLength),
+        hopLength: Int(hopLength)
+    )
+
+    let nIntervals = intervals.count
+    if nIntervals == 0 {
+        // Return empty buffer with shape [0, 2]
+        let emptySignal = Signal(data: [], shape: [0, 2], sampleRate: Int(sampleRate))
+        return fillBuffer(emptySignal, out)
+    }
+
+    // Pack intervals as flat float array: [start0, end0, start1, end1, ...]
+    var flatData = [Float](repeating: 0, count: nIntervals * 2)
+    for (i, interval) in intervals.enumerated() {
+        flatData[i * 2] = Float(interval.start)
+        flatData[i * 2 + 1] = Float(interval.end)
+    }
+
+    let result = Signal(data: flatData, shape: [nIntervals, 2], sampleRate: Int(sampleRate))
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
