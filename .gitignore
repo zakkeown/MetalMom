@@ -19,3 +19,6 @@ python/metalmom/_lib/
 
 # CoreML compiled models (regenerated from .mlmodel)
 *.mlmodelc/
+
+# Worktrees
+.worktrees/
