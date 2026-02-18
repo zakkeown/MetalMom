@@ -31,3 +31,4 @@ from .convert import (
     frames_to_samples, samples_to_frames,
     fft_frequencies, mel_frequencies,
 )
+from .filters import semitone_filterbank, semitone_frequencies

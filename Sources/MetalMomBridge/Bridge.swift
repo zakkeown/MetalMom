@@ -3476,6 +3476,65 @@ public func mm_mel_frequencies(
     return fillBuffer(signal, out)
 }
 
+// MARK: - Semitone Bandpass Filterbank
+
+@_cdecl("mm_semitone_filterbank")
+public func mm_semitone_filterbank(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ midiLow: Int32,
+    _ midiHigh: Int32,
+    _ order: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          sampleRate > 0,
+          midiLow >= 0,
+          midiHigh >= midiLow,
+          order > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let result = SemitoneBandpass.filterbank(
+        signal: signal,
+        sr: Int(sampleRate),
+        midiLow: Int(midiLow),
+        midiHigh: Int(midiHigh),
+        order: Int(order)
+    )
+
+    return fillBuffer(result, out)
+}
+
+@_cdecl("mm_semitone_frequencies")
+public func mm_semitone_frequencies(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ midiLow: Int32,
+    _ midiHigh: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard midiLow >= 0,
+          midiHigh >= midiLow,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let freqs = SemitoneBandpass.semitoneFrequencies(
+        midiLow: Int(midiLow),
+        midiHigh: Int(midiHigh)
+    )
+    let signal = Signal(data: freqs, shape: [freqs.count], sampleRate: 0)
+    return fillBuffer(signal, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
