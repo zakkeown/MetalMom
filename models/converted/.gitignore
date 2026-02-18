@@ -1,0 +1,2 @@
+# Compiled CoreML models can be regenerated from .mlmodel source files
+*.mlmodelc/
