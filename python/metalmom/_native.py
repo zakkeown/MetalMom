@@ -249,6 +249,25 @@ ffi.cdef("""
                                int32_t bins_per_octave, int32_t center,
                                float* out_tuning);
 
+    /* HPSS (Harmonic-Percussive Source Separation) */
+    int32_t mm_hpss(mm_context ctx, const float* signal_data, int64_t signal_length,
+                    int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                    int32_t win_length, int32_t center,
+                    int32_t kernel_size, float power, float margin,
+                    MMBuffer* out);
+
+    int32_t mm_harmonic(mm_context ctx, const float* signal_data, int64_t signal_length,
+                        int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                        int32_t win_length, int32_t center,
+                        int32_t kernel_size, float power, float margin,
+                        MMBuffer* out);
+
+    int32_t mm_percussive(mm_context ctx, const float* signal_data, int64_t signal_length,
+                          int32_t sample_rate, int32_t n_fft, int32_t hop_length,
+                          int32_t win_length, int32_t center,
+                          int32_t kernel_size, float power, float margin,
+                          MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

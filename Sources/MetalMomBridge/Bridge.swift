@@ -1817,6 +1817,161 @@ public func mm_estimate_tuning(
     return MM_OK
 }
 
+// MARK: - HPSS (Harmonic-Percussive Source Separation)
+
+@_cdecl("mm_hpss")
+public func mm_hpss(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ kernelSize: Int32,
+    _ power: Float,
+    _ margin: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let (h, p) = HPSS.hpss(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        center: center != 0,
+        kernelSize: Int(kernelSize),
+        power: power,
+        margin: margin
+    )
+
+    // Pack into shape [2, signalLength]: row 0 = harmonic, row 1 = percussive
+    let outLength = h.count
+    let totalCount = 2 * outLength
+    let outData = UnsafeMutablePointer<Float>.allocate(capacity: totalCount)
+
+    h.withUnsafeBufferPointer { hBuf in
+        outData.initialize(from: hBuf.baseAddress!, count: outLength)
+    }
+    p.withUnsafeBufferPointer { pBuf in
+        (outData + outLength).initialize(from: pBuf.baseAddress!, count: outLength)
+    }
+
+    out.pointee.data = outData
+    out.pointee.ndim = 2
+    withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+        tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+            for i in 0..<8 { shapePtr[i] = 0 }
+            shapePtr[0] = 2
+            shapePtr[1] = Int64(outLength)
+        }
+    }
+    out.pointee.dtype = 0
+    out.pointee.count = Int64(totalCount)
+
+    return MM_OK
+}
+
+@_cdecl("mm_harmonic")
+public func mm_harmonic(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ kernelSize: Int32,
+    _ power: Float,
+    _ margin: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let result = HPSS.harmonic(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        center: center != 0,
+        kernelSize: Int(kernelSize),
+        power: power,
+        margin: margin
+    )
+
+    return fillBuffer(result, out)
+}
+
+@_cdecl("mm_percussive")
+public func mm_percussive(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ kernelSize: Int32,
+    _ power: Float,
+    _ margin: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+
+    let result = HPSS.percussive(
+        signal: signal,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        center: center != 0,
+        kernelSize: Int(kernelSize),
+        power: power,
+        margin: margin
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

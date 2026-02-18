@@ -15,3 +15,4 @@ from . import feature
 from . import onset
 from . import beat
 from . import pitch
+from . import effects
