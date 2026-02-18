@@ -16,3 +16,6 @@ python/metalmom/_lib/
 
 # pytest
 .pytest_cache/
+
+# CoreML compiled models (regenerated from .mlmodel)
+*.mlmodelc/
