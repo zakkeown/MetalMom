@@ -124,6 +124,11 @@ ffi.cdef("""
                               int32_t order, int32_t sr, int32_t n_fft,
                               MMBuffer* out);
 
+    /* Audio Loading */
+    int32_t mm_load(mm_context ctx, const char* path, int32_t sr,
+                    int32_t mono, float offset, float duration,
+                    MMBuffer* out, int32_t* out_sr);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

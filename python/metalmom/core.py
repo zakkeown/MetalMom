@@ -5,6 +5,59 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
+def load(path, sr=22050, mono=True, offset=0.0, duration=None, **kwargs):
+    """Load an audio file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the audio file.
+    sr : int or None
+        Target sample rate. If None, uses native sample rate. Default: 22050.
+    mono : bool
+        Convert to mono. Default: True.
+    offset : float
+        Start reading at this time (seconds). Default: 0.0.
+    duration : float or None
+        Read only this many seconds. Default: None (entire file).
+
+    Returns
+    -------
+    tuple of (np.ndarray, int)
+        Audio data (1D float32) and sample rate.
+    """
+    path_bytes = path.encode('utf-8')
+    c_sr = int(sr) if sr is not None else 0
+    c_dur = float(duration) if duration is not None else 0.0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        out_sr = ffi.new("int32_t*")
+
+        status = lib.mm_load(
+            ctx,
+            path_bytes,
+            c_sr,
+            1 if mono else 0,
+            float(offset),
+            c_dur,
+            out,
+            out_sr,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_load failed with status {status}")
+
+        audio = buffer_to_numpy(out)
+        actual_sr = int(out_sr[0])
+        return audio, actual_sr
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def db_to_amplitude(S_db, ref=1.0):
     """Convert dB-scaled values back to amplitude (magnitude).
 

@@ -988,6 +988,46 @@ public func mm_poly_features(
     return fillBuffer(result, out)
 }
 
+// MARK: - Audio Loading
+
+@_cdecl("mm_load")
+public func mm_load(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ path: UnsafePointer<CChar>?,
+    _ sr: Int32,
+    _ mono: Int32,
+    _ offset: Float,
+    _ duration: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?,
+    _ outSR: UnsafeMutablePointer<Int32>?
+) -> Int32 {
+    guard let path = path, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let pathStr = String(cString: path)
+    let targetSR: Int? = sr > 0 ? Int(sr) : nil
+    let dur: Double? = duration > 0 ? Double(duration) : nil
+
+    do {
+        let result = try AudioIO.load(
+            path: pathStr,
+            sr: targetSR,
+            mono: mono != 0,
+            offset: Double(offset),
+            duration: dur
+        )
+
+        if let outSR = outSR {
+            outSR.pointee = Int32(result.sampleRate)
+        }
+
+        return fillBuffer(result, out)
+    } catch {
+        return MM_ERR_INVALID_INPUT
+    }
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
