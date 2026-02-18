@@ -1209,3 +1209,138 @@ def stack_memory(data, n_steps=2, delay=1, **kwargs):
         return buffer_to_numpy(out)
     finally:
         lib.mm_destroy(ctx)
+
+
+def tempogram(y=None, sr=22050, onset_envelope=None, hop_length=512,
+              n_fft=2048, n_mels=128, fmin=0.0, fmax=None,
+              center=True, win_length=384, **kwargs):
+    """Compute local autocorrelation tempogram.
+
+    For each frame, a Hann-windowed segment of the onset strength envelope
+    is autocorrelated. The stacked autocorrelation columns form a
+    time-frequency representation of local tempo.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    onset_envelope : np.ndarray or None
+        Pre-computed onset strength envelope (not used by native backend;
+        accepted for API compatibility but ignored).
+    hop_length : int
+        Hop length. Default: 512.
+    n_fft : int
+        FFT window size. Default: 2048.
+    n_mels : int
+        Number of mel bands. Default: 128.
+    fmin : float
+        Minimum frequency. Default: 0.0.
+    fmax : float or None
+        Maximum frequency. Default: None (sr/2).
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+    win_length : int
+        Window length for local analysis. Default: 384.
+
+    Returns
+    -------
+    np.ndarray
+        Autocorrelation tempogram, shape ``(win_length, n_frames)``.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_fmax = float(fmax) if fmax is not None else 0.0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_tempogram(
+            ctx, signal_ptr, len(y),
+            sr, hop_length, n_fft,
+            n_mels, fmin, c_fmax,
+            1 if center else 0, win_length,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_tempogram failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def fourier_tempogram(y=None, sr=22050, onset_envelope=None, hop_length=512,
+                      n_fft=2048, n_mels=128, fmin=0.0, fmax=None,
+                      center=True, win_length=384, **kwargs):
+    """Compute Fourier tempogram.
+
+    For each frame, a Hann-windowed segment of the onset strength envelope
+    is FFT'd and the magnitude of positive frequencies is taken. The
+    stacked magnitude spectra form a time-frequency representation of
+    local tempo.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    onset_envelope : np.ndarray or None
+        Pre-computed onset strength envelope (not used by native backend;
+        accepted for API compatibility but ignored).
+    hop_length : int
+        Hop length. Default: 512.
+    n_fft : int
+        FFT window size. Default: 2048.
+    n_mels : int
+        Number of mel bands. Default: 128.
+    fmin : float
+        Minimum frequency. Default: 0.0.
+    fmax : float or None
+        Maximum frequency. Default: None (sr/2).
+    center : bool
+        Centre-pad signal before STFT. Default: True.
+    win_length : int
+        Window length for local analysis. Default: 384.
+
+    Returns
+    -------
+    np.ndarray
+        Fourier tempogram, shape ``(win_length // 2 + 1, n_frames)``.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+    c_fmax = float(fmax) if fmax is not None else 0.0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_fourier_tempogram(
+            ctx, signal_ptr, len(y),
+            sr, hop_length, n_fft,
+            n_mels, fmin, c_fmax,
+            1 if center else 0, win_length,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_fourier_tempogram failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)

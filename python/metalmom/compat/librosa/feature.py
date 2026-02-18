@@ -6,5 +6,5 @@ from metalmom.feature import (
     spectral_rolloff, spectral_flatness,
     rms, zero_crossing_rate, tonnetz,
     delta, stack_memory, poly_features,
-    tempo,
+    tempo, tempogram, fourier_tempogram,
 )
