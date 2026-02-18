@@ -25,11 +25,18 @@ public final class SmartDispatcher {
     /// Execute a compute operation, routing to the appropriate backend.
     public func dispatch<Op: ComputeOperation>(_ op: Op, input: Op.Input, dataSize: Int) -> Op.Output {
         let decision = routingDecision(dataSize: dataSize, operationThreshold: Op.dispatchThreshold)
+        let profiler = Profiler.shared
         switch decision {
         case .accelerate:
-            return op.executeCPU(input)
+            let state = profiler.begin("CPU Compute")
+            let result = op.executeCPU(input)
+            profiler.end("CPU Compute", state)
+            return result
         case .metal:
-            return op.executeGPU(input)
+            let state = profiler.begin("GPU Compute")
+            let result = op.executeGPU(input)
+            profiler.end("GPU Compute", state)
+            return result
         }
     }
 }

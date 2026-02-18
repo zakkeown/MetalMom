@@ -42,4 +42,10 @@ public final class MetalBackend {
     public func makeCommandBuffer() -> MTLCommandBuffer? {
         commandQueue.makeCommandBuffer()
     }
+
+    /// Create a command buffer and log a signpost event for GPU dispatch tracking.
+    public func makeProfiledCommandBuffer() -> MTLCommandBuffer? {
+        Profiler.shared.event("GPU CmdBuf Create")
+        return commandQueue.makeCommandBuffer()
+    }
 }
