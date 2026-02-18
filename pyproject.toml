@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "metalmom"
+version = "0.1.0"
+description = "GPU-accelerated audio/music analysis on Apple Metal"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "numpy>=1.24",
+    "cffi>=1.16",
+    "soundfile>=0.12",
+]
+
+[project.optional-dependencies]
+display = ["matplotlib>=3.7"]
+eval = ["mir_eval>=0.7"]
+dev = ["pytest>=7.0", "librosa>=0.11.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["python/metalmom"]
+
+[tool.pytest.ini_options]
+testpaths = ["Tests"]
