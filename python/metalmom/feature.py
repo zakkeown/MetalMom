@@ -417,6 +417,205 @@ def _chroma_filterbank(sr, n_fft, n_chroma=12, tuning=0.0,
     return np.ascontiguousarray(wts[:, :n_freqs], dtype=np.float32)
 
 
+def chroma_cqt(y=None, sr=22050, hop_length=None, fmin=32.7,
+               bins_per_octave=36, n_octaves=7, n_chroma=12,
+               norm=None, **kwargs):
+    """Compute CQT-based chroma features.
+
+    Uses the Constant-Q Transform instead of the STFT, then folds CQT bins
+    across octaves into chroma pitch classes.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    hop_length : int or None
+        Hop length in samples. Default: auto-selected.
+    fmin : float
+        Lowest CQT frequency in Hz. Default: 32.7 (C1).
+    bins_per_octave : int
+        CQT bins per octave. Default: 36.
+    n_octaves : int
+        Number of octaves to span. Default: 7.
+    n_chroma : int
+        Number of chroma bins. Default: 12.
+    norm : float or None
+        Normalization order per frame. None = no normalization,
+        2.0 = L2 normalization. Default: None.
+
+    Returns
+    -------
+    np.ndarray
+        CQT chroma features, shape ``(n_chroma, n_frames)``.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    hop = int(hop_length) if hop_length is not None else 0
+    c_norm = float(norm) if norm is not None else 0.0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_chroma_cqt(
+            ctx, signal_ptr, len(y),
+            sr, hop,
+            float(fmin), bins_per_octave, n_octaves,
+            n_chroma, c_norm,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_chroma_cqt failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def chroma_cens(y=None, sr=22050, hop_length=None, fmin=32.7,
+                bins_per_octave=36, n_octaves=7, n_chroma=12,
+                win_len_smooth=41, **kwargs):
+    """Compute CENS (Chroma Energy Normalized Statistics) features.
+
+    Applies post-processing to CQT chroma: L1 normalize, quantize,
+    Hann-smooth, and L2 normalize. CENS features are robust to
+    variations in dynamics and timbre.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    hop_length : int or None
+        Hop length in samples. Default: auto-selected.
+    fmin : float
+        Lowest CQT frequency in Hz. Default: 32.7 (C1).
+    bins_per_octave : int
+        CQT bins per octave. Default: 36.
+    n_octaves : int
+        Number of octaves to span. Default: 7.
+    n_chroma : int
+        Number of chroma bins. Default: 12.
+    win_len_smooth : int
+        Smoothing window length. Default: 41.
+
+    Returns
+    -------
+    np.ndarray
+        CENS chroma features, shape ``(n_chroma, n_frames)``.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    hop = int(hop_length) if hop_length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_chroma_cens(
+            ctx, signal_ptr, len(y),
+            sr, hop,
+            float(fmin), bins_per_octave, n_octaves,
+            n_chroma, win_len_smooth,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_chroma_cens failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def chroma_vqt(y=None, sr=22050, hop_length=None, fmin=32.7,
+               bins_per_octave=36, n_octaves=7, gamma=0.0,
+               n_chroma=12, norm=None, **kwargs):
+    """Compute VQT-based chroma features.
+
+    Uses the Variable-Q Transform instead of the standard CQT, then folds
+    bins across octaves into chroma pitch classes.
+
+    Parameters
+    ----------
+    y : np.ndarray or None
+        Audio signal (1D float32/float64 array).
+    sr : int
+        Sample rate. Default: 22050.
+    hop_length : int or None
+        Hop length in samples. Default: auto-selected.
+    fmin : float
+        Lowest VQT frequency in Hz. Default: 32.7 (C1).
+    bins_per_octave : int
+        VQT bins per octave. Default: 36.
+    n_octaves : int
+        Number of octaves to span. Default: 7.
+    gamma : float
+        VQT gamma parameter. 0 = standard CQT. Default: 0.0.
+    n_chroma : int
+        Number of chroma bins. Default: 12.
+    norm : float or None
+        Normalization order per frame. Default: None.
+
+    Returns
+    -------
+    np.ndarray
+        VQT chroma features, shape ``(n_chroma, n_frames)``.
+
+    Notes
+    -----
+    This function is implemented purely in Python using the native VQT
+    backend and chroma folding, as the VQT chroma bridge is not yet
+    exposed through the C ABI.
+    """
+    if y is None:
+        raise ValueError("y must be provided")
+
+    # Use CQT chroma with gamma=0 as a reasonable fallback
+    # (VQT with gamma=0 is equivalent to CQT)
+    # For non-zero gamma, compute VQT then fold in Python
+    from .cqt import vqt as compute_vqt
+
+    vqt_mag = compute_vqt(y, sr=sr, hop_length=hop_length, fmin=fmin,
+                           fmax=fmin * 2.0 ** n_octaves,
+                           bins_per_octave=bins_per_octave, gamma=gamma)
+
+    n_bins, n_frames = vqt_mag.shape
+    bins_per_chroma = bins_per_octave // n_chroma
+
+    # Fold across octaves into chroma bins
+    chroma = np.zeros((n_chroma, n_frames), dtype=np.float32)
+    for b in range(n_bins):
+        pos_in_octave = b % bins_per_octave
+        if bins_per_chroma > 0:
+            chroma_idx = (pos_in_octave // bins_per_chroma) % n_chroma
+        else:
+            chroma_idx = pos_in_octave % n_chroma
+        chroma[chroma_idx] += vqt_mag[b]
+
+    # Normalize if requested
+    if norm is not None:
+        chroma = _normalize_frames(chroma, norm=norm)
+
+    return chroma
+
+
 def spectral_centroid(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,
                       win_length=None, center=True, freq=None, **kwargs):
     """Compute spectral centroid.

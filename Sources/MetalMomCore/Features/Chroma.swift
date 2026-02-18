@@ -272,4 +272,389 @@ public enum Chroma {
 
         return Signal(data: fb, shape: [nChroma, nFreqs], sampleRate: sr)
     }
+
+    // MARK: - CQT-based Chroma
+
+    /// Compute CQT-based chroma features.
+    ///
+    /// Uses the Constant-Q Transform instead of the STFT as the underlying spectral
+    /// representation, then folds CQT bins across octaves into chroma pitch classes.
+    /// CQT-based chroma has better frequency resolution at low frequencies compared
+    /// to STFT-based chroma.
+    ///
+    /// Returns a `Signal` with shape `[nChroma, nFrames]`, row-major.
+    ///
+    /// - Parameters:
+    ///   - signal: Input audio signal (1D).
+    ///   - sr: Sample rate override. If `nil`, uses `signal.sampleRate`.
+    ///   - hopLength: Hop length in samples. Default auto-selected.
+    ///   - fMin: Lowest CQT frequency in Hz. Default 32.7 (C1).
+    ///   - binsPerOctave: CQT bins per octave. Default 36 (3x oversampling).
+    ///   - nOctaves: Number of octaves to span. Default 7.
+    ///   - nChroma: Number of chroma bins. Default 12.
+    ///   - norm: Normalization order per frame. `nil` = none, `2.0` = L2. Default `nil`.
+    /// - Returns: CQT chroma `Signal` with shape `[nChroma, nFrames]`.
+    public static func cqt(
+        signal: Signal,
+        sr: Int? = nil,
+        hopLength: Int? = nil,
+        fMin: Float = 32.7,
+        binsPerOctave: Int = 36,
+        nOctaves: Int = 7,
+        nChroma: Int = 12,
+        norm: Float? = nil
+    ) -> Signal {
+        let sampleRate = sr ?? signal.sampleRate
+
+        // Compute CQT magnitude: shape [nOctaves * binsPerOctave, nFrames]
+        let fMax = fMin * powf(2.0, Float(nOctaves))
+        let cqtMag = CQT.compute(
+            signal: signal,
+            sr: sampleRate,
+            hopLength: hopLength,
+            fMin: fMin,
+            fMax: fMax,
+            binsPerOctave: binsPerOctave
+        )
+
+        let actualBins = cqtMag.shape[0]
+        let nFrames = cqtMag.shape[1]
+
+        guard nFrames > 0 && actualBins > 0 else {
+            return Signal(data: [], shape: [nChroma, 0], sampleRate: sampleRate)
+        }
+
+        return foldCQTToChroma(
+            cqtMag: cqtMag,
+            nBins: actualBins,
+            nFrames: nFrames,
+            binsPerOctave: binsPerOctave,
+            nChroma: nChroma,
+            norm: norm,
+            sampleRate: sampleRate
+        )
+    }
+
+    // MARK: - CENS Chroma
+
+    /// Compute CENS (Chroma Energy Normalized Statistics) features.
+    ///
+    /// CENS applies a series of post-processing steps to chroma features:
+    /// 1. L1 normalize each frame
+    /// 2. Quantize values using logarithmic thresholds
+    /// 3. Smooth with a Hann window
+    /// 4. L2 normalize each frame
+    ///
+    /// CENS features are robust to variations in dynamics and timbre, making
+    /// them suitable for audio matching and cover song identification.
+    ///
+    /// Returns a `Signal` with shape `[nChroma, nFrames]`, row-major.
+    ///
+    /// - Parameters:
+    ///   - signal: Input audio signal (1D).
+    ///   - sr: Sample rate override. If `nil`, uses `signal.sampleRate`.
+    ///   - hopLength: Hop length in samples. Default auto-selected.
+    ///   - fMin: Lowest CQT frequency in Hz. Default 32.7 (C1).
+    ///   - binsPerOctave: CQT bins per octave. Default 36.
+    ///   - nOctaves: Number of octaves to span. Default 7.
+    ///   - nChroma: Number of chroma bins. Default 12.
+    ///   - winLenSmooth: Smoothing window length. Default 41.
+    /// - Returns: CENS chroma `Signal` with shape `[nChroma, nFrames]`.
+    public static func cens(
+        signal: Signal,
+        sr: Int? = nil,
+        hopLength: Int? = nil,
+        fMin: Float = 32.7,
+        binsPerOctave: Int = 36,
+        nOctaves: Int = 7,
+        nChroma: Int = 12,
+        winLenSmooth: Int = 41
+    ) -> Signal {
+        let sampleRate = sr ?? signal.sampleRate
+
+        // 1. Compute CQT chroma (unnormalized)
+        let rawChroma = cqt(
+            signal: signal,
+            sr: sampleRate,
+            hopLength: hopLength,
+            fMin: fMin,
+            binsPerOctave: binsPerOctave,
+            nOctaves: nOctaves,
+            nChroma: nChroma,
+            norm: nil
+        )
+
+        let nFrames = rawChroma.shape[1]
+        guard nFrames > 0 else {
+            return Signal(data: [], shape: [nChroma, 0], sampleRate: sampleRate)
+        }
+
+        let totalCount = nChroma * nFrames
+        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalCount)
+
+        rawChroma.withUnsafeBufferPointer { src in
+            outPtr.initialize(from: src.baseAddress!, count: totalCount)
+        }
+
+        // 2. L1 normalize each frame
+        for f in 0..<nFrames {
+            var l1: Float = 0
+            for c in 0..<nChroma {
+                l1 += abs(outPtr[c * nFrames + f])
+            }
+            if l1 > 1e-10 {
+                for c in 0..<nChroma {
+                    outPtr[c * nFrames + f] /= l1
+                }
+            }
+        }
+
+        // 3. Quantize using logarithmic thresholds: [0, 0.05, 0.1, 0.2, 0.4, 1.0] -> [0, 1, 2, 3, 4]
+        let thresholds: [Float] = [0.05, 0.1, 0.2, 0.4]
+        for i in 0..<totalCount {
+            let val = outPtr[i]
+            if val < thresholds[0] {
+                outPtr[i] = 0
+            } else if val < thresholds[1] {
+                outPtr[i] = 1
+            } else if val < thresholds[2] {
+                outPtr[i] = 2
+            } else if val < thresholds[3] {
+                outPtr[i] = 3
+            } else {
+                outPtr[i] = 4
+            }
+        }
+
+        // 4. Smooth with Hann window along the time axis
+        if winLenSmooth > 1 && nFrames > 1 {
+            // Build Hann window
+            var hannWindow = [Float](repeating: 0, count: winLenSmooth)
+            for i in 0..<winLenSmooth {
+                hannWindow[i] = 0.5 * (1.0 - cosf(2.0 * .pi * Float(i) / Float(winLenSmooth - 1)))
+            }
+            // Normalize window
+            var windowSum: Float = 0
+            for i in 0..<winLenSmooth { windowSum += hannWindow[i] }
+            if windowSum > 0 {
+                for i in 0..<winLenSmooth { hannWindow[i] /= windowSum }
+            }
+
+            let halfWin = winLenSmooth / 2
+            let tempPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalCount)
+            tempPtr.initialize(repeating: 0, count: totalCount)
+
+            for c in 0..<nChroma {
+                for f in 0..<nFrames {
+                    var sum: Float = 0
+                    for w in 0..<winLenSmooth {
+                        let srcF = f + w - halfWin
+                        // Clamp to valid range (reflect at boundaries)
+                        let clampedF = max(0, min(nFrames - 1, srcF))
+                        sum += outPtr[c * nFrames + clampedF] * hannWindow[w]
+                    }
+                    tempPtr[c * nFrames + f] = sum
+                }
+            }
+
+            // Copy back
+            for i in 0..<totalCount {
+                outPtr[i] = tempPtr[i]
+            }
+            tempPtr.deallocate()
+        }
+
+        // 5. L2 normalize each frame
+        for f in 0..<nFrames {
+            var l2Sq: Float = 0
+            for c in 0..<nChroma {
+                let val = outPtr[c * nFrames + f]
+                l2Sq += val * val
+            }
+            let l2 = sqrtf(l2Sq)
+            if l2 > 1e-10 {
+                for c in 0..<nChroma {
+                    outPtr[c * nFrames + f] /= l2
+                }
+            }
+        }
+
+        let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: totalCount)
+        return Signal(taking: outBuffer, shape: [nChroma, nFrames], sampleRate: sampleRate)
+    }
+
+    // MARK: - VQT-based Chroma
+
+    /// Compute VQT-based chroma features.
+    ///
+    /// Uses the Variable-Q Transform instead of the standard CQT, then folds bins
+    /// across octaves into chroma pitch classes. The VQT provides better time
+    /// resolution at low frequencies through the gamma parameter.
+    ///
+    /// Returns a `Signal` with shape `[nChroma, nFrames]`, row-major.
+    ///
+    /// - Parameters:
+    ///   - signal: Input audio signal (1D).
+    ///   - sr: Sample rate override. If `nil`, uses `signal.sampleRate`.
+    ///   - hopLength: Hop length in samples. Default auto-selected.
+    ///   - fMin: Lowest VQT frequency in Hz. Default 32.7 (C1).
+    ///   - binsPerOctave: VQT bins per octave. Default 36.
+    ///   - nOctaves: Number of octaves to span. Default 7.
+    ///   - gamma: VQT gamma parameter controlling bandwidth variation. Default 0 (= standard CQT).
+    ///   - nChroma: Number of chroma bins. Default 12.
+    ///   - norm: Normalization order per frame. `nil` = none, `2.0` = L2. Default `nil`.
+    /// - Returns: VQT chroma `Signal` with shape `[nChroma, nFrames]`.
+    public static func vqt(
+        signal: Signal,
+        sr: Int? = nil,
+        hopLength: Int? = nil,
+        fMin: Float = 32.7,
+        binsPerOctave: Int = 36,
+        nOctaves: Int = 7,
+        gamma: Float = 0.0,
+        nChroma: Int = 12,
+        norm: Float? = nil
+    ) -> Signal {
+        let sampleRate = sr ?? signal.sampleRate
+
+        // Compute VQT magnitude: shape [nOctaves * binsPerOctave, nFrames]
+        let fMax = fMin * powf(2.0, Float(nOctaves))
+        let vqtMag = CQT.vqt(
+            signal: signal,
+            sr: sampleRate,
+            hopLength: hopLength,
+            fMin: fMin,
+            fMax: fMax,
+            binsPerOctave: binsPerOctave,
+            gamma: gamma
+        )
+
+        let actualBins = vqtMag.shape[0]
+        let nFrames = vqtMag.shape[1]
+
+        guard nFrames > 0 && actualBins > 0 else {
+            return Signal(data: [], shape: [nChroma, 0], sampleRate: sampleRate)
+        }
+
+        return foldCQTToChroma(
+            cqtMag: vqtMag,
+            nBins: actualBins,
+            nFrames: nFrames,
+            binsPerOctave: binsPerOctave,
+            nChroma: nChroma,
+            norm: norm,
+            sampleRate: sampleRate
+        )
+    }
+
+    // MARK: - Deep Chroma
+
+    /// Compute deep chroma features.
+    ///
+    /// This is a placeholder that uses CQT-based chroma as the foundation.
+    /// A full deep chroma implementation would apply a learned neural network
+    /// transformation to the CQT representation. In this version, the CQT chroma
+    /// is computed with L2 normalization as a reasonable approximation.
+    ///
+    /// Returns a `Signal` with shape `[nChroma, nFrames]`, row-major.
+    ///
+    /// - Parameters:
+    ///   - signal: Input audio signal (1D).
+    ///   - sr: Sample rate override. If `nil`, uses `signal.sampleRate`.
+    ///   - hopLength: Hop length in samples. Default auto-selected.
+    ///   - nChroma: Number of chroma bins. Default 12.
+    /// - Returns: Deep chroma `Signal` with shape `[nChroma, nFrames]`.
+    public static func deep(
+        signal: Signal,
+        sr: Int? = nil,
+        hopLength: Int? = nil,
+        nChroma: Int = 12
+    ) -> Signal {
+        // Placeholder: use CQT chroma with L2 normalization
+        return cqt(
+            signal: signal,
+            sr: sr,
+            hopLength: hopLength,
+            nChroma: nChroma,
+            norm: 2.0
+        )
+    }
+
+    // MARK: - Private Helpers
+
+    /// Fold CQT/VQT bins across octaves into chroma pitch classes.
+    ///
+    /// Given a CQT magnitude spectrogram of shape [nBins, nFrames], maps each bin
+    /// to a chroma pitch class and sums across octaves. The mapping accounts for
+    /// the ratio between binsPerOctave and nChroma.
+    private static func foldCQTToChroma(
+        cqtMag: Signal,
+        nBins: Int,
+        nFrames: Int,
+        binsPerOctave: Int,
+        nChroma: Int,
+        norm: Float?,
+        sampleRate: Int
+    ) -> Signal {
+        let outCount = nChroma * nFrames
+        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
+        outPtr.initialize(repeating: 0, count: outCount)
+
+        // Ratio of CQT bins per chroma bin
+        let binsPerChroma = binsPerOctave / nChroma
+
+        cqtMag.withUnsafeBufferPointer { src in
+            for bin in 0..<nBins {
+                // Map CQT bin to chroma class
+                // bin % binsPerOctave gives position within octave
+                // Then divide by binsPerChroma to get chroma index
+                let posInOctave = bin % binsPerOctave
+                let chromaIdx: Int
+                if binsPerChroma > 0 {
+                    chromaIdx = (posInOctave / binsPerChroma) % nChroma
+                } else {
+                    chromaIdx = posInOctave % nChroma
+                }
+
+                // Sum this CQT bin's energy into the chroma bin
+                for f in 0..<nFrames {
+                    outPtr[chromaIdx * nFrames + f] += src[bin * nFrames + f]
+                }
+            }
+        }
+
+        // Normalize if requested
+        if let normOrder = norm {
+            if normOrder == 2.0 {
+                for f in 0..<nFrames {
+                    var l2Sq: Float = 0
+                    for c in 0..<nChroma {
+                        let val = outPtr[c * nFrames + f]
+                        l2Sq += val * val
+                    }
+                    let l2 = sqrtf(l2Sq)
+                    if l2 > 1e-10 {
+                        for c in 0..<nChroma {
+                            outPtr[c * nFrames + f] /= l2
+                        }
+                    }
+                }
+            } else if normOrder == 1.0 {
+                for f in 0..<nFrames {
+                    var l1: Float = 0
+                    for c in 0..<nChroma {
+                        l1 += abs(outPtr[c * nFrames + f])
+                    }
+                    if l1 > 1e-10 {
+                        for c in 0..<nChroma {
+                            outPtr[c * nFrames + f] /= l1
+                        }
+                    }
+                }
+            }
+        }
+
+        let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: outCount)
+        return Signal(taking: outBuffer, shape: [nChroma, nFrames], sampleRate: sampleRate)
+    }
 }

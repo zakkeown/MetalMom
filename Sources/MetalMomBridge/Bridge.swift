@@ -2848,6 +2848,98 @@ public func mm_a_weighting(
     return fillBuffer(result, out)
 }
 
+// MARK: - Chroma CQT
+
+@_cdecl("mm_chroma_cqt")
+public func mm_chroma_cqt(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ fMin: Float,
+    _ binsPerOctave: Int32,
+    _ nOctaves: Int32,
+    _ nChroma: Int32,
+    _ norm: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    // norm <= 0 signals no normalization
+    let normOpt: Float? = norm > 0 ? norm : nil
+
+    let result = Chroma.cqt(
+        signal: signal,
+        sr: Int(sampleRate),
+        hopLength: hopOpt,
+        fMin: fMin,
+        binsPerOctave: Int(binsPerOctave),
+        nOctaves: Int(nOctaves),
+        nChroma: Int(nChroma),
+        norm: normOpt
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - Chroma CENS
+
+@_cdecl("mm_chroma_cens")
+public func mm_chroma_cens(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ fMin: Float,
+    _ binsPerOctave: Int32,
+    _ nOctaves: Int32,
+    _ nChroma: Int32,
+    _ winLenSmooth: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+
+    let result = Chroma.cens(
+        signal: signal,
+        sr: Int(sampleRate),
+        hopLength: hopOpt,
+        fMin: fMin,
+        binsPerOctave: Int(binsPerOctave),
+        nOctaves: Int(nOctaves),
+        nChroma: Int(nChroma),
+        winLenSmooth: Int(winLenSmooth)
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
