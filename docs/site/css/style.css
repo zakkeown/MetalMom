@@ -1246,3 +1246,26 @@ section {
 .content-page.content-page--wide {
   max-width: 920px;
 }
+
+/* ============================================================
+   Benchmarks Page — Speedup Colors, Total Row, Backend Badges
+   ============================================================ */
+
+/* Speedup color coding */
+.speedup-fast { color: #22c55e; font-weight: 600; }  /* >= 2x */
+.speedup-good { color: #f59e0b; font-weight: 600; }  /* 1-2x */
+.speedup-slow { color: #9896a1; }                      /* < 1x */
+
+/* Total row in benchmark tables */
+.content-table .table-total-row td {
+  border-top: 1px solid var(--border-light);
+  border-bottom: none;
+  padding-top: 1rem;
+  color: var(--text-primary);
+}
+
+/* CoreML backend badge */
+.backend-coreml {
+  color: #c084fc;
+  font-weight: 600;
+}

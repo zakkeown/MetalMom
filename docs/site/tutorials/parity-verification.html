@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verifying Parity with librosa — MetalMom</title>
+  <meta name="description" content="How to verify MetalMom produces the same results as librosa. Element-wise, behavioral, and task-level parity testing.">
+  <meta property="og:title" content="Verifying Parity with librosa — MetalMom">
+  <meta property="og:description" content="Trust but verify. Run the same analysis in both and compare. Mom shows her work.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="../index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="../getting-started.html">Getting Started</a>
+        <a href="../migration-librosa.html">Migration</a>
+        <a href="beat-tracking.html" class="active">Tutorials</a>
+        <a href="../benchmarks.html">Benchmarks</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Verifying Parity with librosa</h1>
+      <p class="content-subtitle">Trust but verify. Run the same analysis in both and compare. Mom shows her work.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Content
+       ============================================================ -->
+  <main class="content-page">
+
+    <!-- Section 1: Why Parity Matters -->
+    <section class="content-section" id="why-parity-matters">
+      <h2>Why Parity Matters</h2>
+      <p>MetalMom is a drop-in replacement for librosa, but the implementations are different (Swift/Metal vs Python/NumPy). Numerical results should match within floating-point tolerances.</p>
+      <p>MetalMom's own test suite runs 1,233 parity checks across three verification tiers. This tutorial shows you how to run the same checks on your own data.</p>
+    </section>
+
+    <!-- Section 2: Element-wise Comparison -->
+    <section class="content-section" id="element-wise-comparison">
+      <h2>Element-wise Comparison</h2>
+      <p>The simplest check: compute the same feature in both libraries and compare arrays directly.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span>
+<span class="kw">import</span> <span class="var">metalmom</span>
+
+<span class="cm"># Also install librosa for comparison</span>
+<span class="kw">import</span> <span class="var">librosa</span>
+
+<span class="cm"># Generate a test signal</span>
+<span class="var">y</span> <span class="op">=</span> <span class="var">np</span><span class="op">.</span><span class="var">random</span><span class="op">.</span><span class="fn">randn</span><span class="op">(</span><span class="var">22050</span> <span class="op">*</span> <span class="var">5</span><span class="op">)</span><span class="op">.</span><span class="fn">astype</span><span class="op">(</span><span class="var">np</span><span class="op">.</span><span class="var">float32</span><span class="op">)</span>  <span class="cm"># 5 seconds</span>
+<span class="var">sr</span> <span class="op">=</span> <span class="var">22050</span>
+
+<span class="cm"># Compute STFT in both</span>
+<span class="var">S_mm</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">stft</span><span class="op">(</span><span class="var">y</span><span class="op">,</span> <span class="arg">n_fft</span><span class="op">=</span><span class="var">2048</span><span class="op">,</span> <span class="arg">hop_length</span><span class="op">=</span><span class="var">512</span><span class="op">)</span>
+<span class="var">S_lr</span> <span class="op">=</span> <span class="var">librosa</span><span class="op">.</span><span class="fn">stft</span><span class="op">(</span><span class="var">y</span><span class="op">,</span> <span class="arg">n_fft</span><span class="op">=</span><span class="var">2048</span><span class="op">,</span> <span class="arg">hop_length</span><span class="op">=</span><span class="var">512</span><span class="op">)</span>
+
+<span class="cm"># Compare</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Shape match: </span><span class="op">{</span><span class="var">S_mm</span><span class="op">.</span><span class="var">shape</span> <span class="op">==</span> <span class="var">S_lr</span><span class="op">.</span><span class="var">shape</span><span class="op">}</span><span class="str">"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Max abs diff: </span><span class="op">{</span><span class="var">np</span><span class="op">.</span><span class="fn">max</span><span class="op">(</span><span class="var">np</span><span class="op">.</span><span class="fn">abs</span><span class="op">(</span><span class="var">S_mm</span> <span class="op">-</span> <span class="var">S_lr</span><span class="op">)</span><span class="op">)</span><span class="op">:</span><span class="str">.2e</span><span class="op">}</span><span class="str">"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"All close (rtol=1e-4): </span><span class="op">{</span><span class="var">np</span><span class="op">.</span><span class="fn">allclose</span><span class="op">(</span><span class="var">S_mm</span><span class="op">,</span> <span class="var">S_lr</span><span class="op">,</span> <span class="arg">rtol</span><span class="op">=</span><span class="var">1e-4</span><span class="op">,</span> <span class="arg">atol</span><span class="op">=</span><span class="var">1e-6</span><span class="op">)</span><span class="op">}</span><span class="str">"</span><span class="op">)</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 3: Tier 1 Tolerances -->
+    <section class="content-section" id="tier-1-tolerances">
+      <h2>Tier 1: Element-wise Tolerances</h2>
+      <p>These are the tolerances MetalMom's own test suite uses. If your results fall within these bounds, everything is working as expected.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>rtol</th>
+              <th>atol</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>STFT</td>
+              <td><code>1e-4</code></td>
+              <td><code>1e-6</code></td>
+              <td>Direct FFT comparison</td>
+            </tr>
+            <tr>
+              <td>Mel spectrogram</td>
+              <td><code>1e-4</code></td>
+              <td><code>1e-6</code></td>
+              <td>Filterbank can vary slightly</td>
+            </tr>
+            <tr>
+              <td>MFCC</td>
+              <td><code>1e-3</code></td>
+              <td><code>1e-5</code></td>
+              <td>DCT amplifies small differences</td>
+            </tr>
+            <tr>
+              <td>Chroma</td>
+              <td><code>1e-3</code></td>
+              <td><code>1e-5</code></td>
+              <td>Depends on spectrogram path</td>
+            </tr>
+            <tr>
+              <td>Onset strength</td>
+              <td><code>1e-3</code></td>
+              <td><code>1e-4</code></td>
+              <td>Aggregation compounds errors</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>These tolerances are what MetalMom's own test suite uses. If you see numbers within these ranges, you're golden.</p>
+    </section>
+
+    <!-- Section 4: Tier 2 Behavioral -->
+    <section class="content-section" id="tier-2-behavioral">
+      <h2>Tier 2: Behavioral Metrics</h2>
+      <p>When element-wise comparison is too strict (large FFT sizes, chained operations), check behavioral equivalence instead. Two spectrograms can differ slightly per-element but represent the same audio perfectly.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="cm"># When element-wise is too strict, check behavioral equivalence</span>
+
+<span class="cm"># Signal-to-Noise Ratio</span>
+<span class="kw">def</span> <span class="fn">snr</span><span class="op">(</span><span class="var">reference</span><span class="op">,</span> <span class="var">test</span><span class="op">)</span><span class="op">:</span>
+    <span class="var">noise</span> <span class="op">=</span> <span class="var">test</span> <span class="op">-</span> <span class="var">reference</span>
+    <span class="kw">return</span> <span class="var">10</span> <span class="op">*</span> <span class="var">np</span><span class="op">.</span><span class="fn">log10</span><span class="op">(</span><span class="var">np</span><span class="op">.</span><span class="fn">sum</span><span class="op">(</span><span class="var">reference</span><span class="op">**</span><span class="var">2</span><span class="op">)</span> <span class="op">/</span> <span class="var">np</span><span class="op">.</span><span class="fn">sum</span><span class="op">(</span><span class="var">noise</span><span class="op">**</span><span class="var">2</span><span class="op">)</span><span class="op">)</span>
+
+<span class="var">S_mm_mag</span> <span class="op">=</span> <span class="var">np</span><span class="op">.</span><span class="fn">abs</span><span class="op">(</span><span class="var">metalmom</span><span class="op">.</span><span class="fn">stft</span><span class="op">(</span><span class="var">y</span><span class="op">)</span><span class="op">)</span>
+<span class="var">S_lr_mag</span> <span class="op">=</span> <span class="var">np</span><span class="op">.</span><span class="fn">abs</span><span class="op">(</span><span class="var">librosa</span><span class="op">.</span><span class="fn">stft</span><span class="op">(</span><span class="var">y</span><span class="op">)</span><span class="op">)</span>
+
+<span class="fn">print</span><span class="op">(</span><span class="str">f"SNR: </span><span class="op">{</span><span class="fn">snr</span><span class="op">(</span><span class="var">S_lr_mag</span><span class="op">,</span> <span class="var">S_mm_mag</span><span class="op">)</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str"> dB"</span><span class="op">)</span>  <span class="cm"># Should be &gt; 40 dB</span>
+
+<span class="cm"># Energy ratio</span>
+<span class="var">energy_mm</span> <span class="op">=</span> <span class="var">np</span><span class="op">.</span><span class="fn">sum</span><span class="op">(</span><span class="var">S_mm_mag</span><span class="op">**</span><span class="var">2</span><span class="op">)</span>
+<span class="var">energy_lr</span> <span class="op">=</span> <span class="var">np</span><span class="op">.</span><span class="fn">sum</span><span class="op">(</span><span class="var">S_lr_mag</span><span class="op">**</span><span class="var">2</span><span class="op">)</span>
+<span class="var">ratio</span> <span class="op">=</span> <span class="var">energy_mm</span> <span class="op">/</span> <span class="var">energy_lr</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Energy ratio: </span><span class="op">{</span><span class="var">ratio</span><span class="op">:</span><span class="str">.6f</span><span class="op">}</span><span class="str">"</span><span class="op">)</span>  <span class="cm"># Should be ~1.0</span></code></pre>
+      </div>
+
+      <div class="content-note">
+        An SNR above 40 dB means the difference is inaudible. An energy ratio within 0.001 of 1.0 means total power is preserved. Both are strong indicators of correct computation.
+      </div>
+    </section>
+
+    <!-- Section 5: Tier 3 Task-level -->
+    <section class="content-section" id="tier-3-task-level">
+      <h2>Tier 3: Task-level Metrics</h2>
+      <p>For high-level features like beat tracking and onset detection, compare the musical results rather than intermediate arrays. Two algorithms can produce slightly different spectrograms but agree on where the beats are.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="cm"># For beat tracking, onset detection — compare task results</span>
+<span class="var">tempo_mm</span><span class="op">,</span> <span class="var">beats_mm</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+<span class="var">tempo_lr</span><span class="op">,</span> <span class="var">beats_lr</span> <span class="op">=</span> <span class="var">librosa</span><span class="op">.</span><span class="var">beat</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Tempo: MetalMom=</span><span class="op">{</span><span class="var">tempo_mm</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str">, librosa=</span><span class="op">{</span><span class="var">tempo_lr</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str">"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Beat count: MetalMom=</span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">beats_mm</span><span class="op">)</span><span class="op">}</span><span class="str">, librosa=</span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">beats_lr</span><span class="op">)</span><span class="op">}</span><span class="str">"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p>For beat tracking, tempo estimates within 1-2 BPM and beat counts within a few beats are typical for identical algorithms with different floating-point paths.</p>
+    </section>
+
+    <!-- Section 6: When Results Don't Match -->
+    <section class="content-section" id="when-results-differ">
+      <h2>When Results Don't Match</h2>
+      <p>Small differences are expected &mdash; different FFT implementations, float32 vs float64, different padding strategies. If you see large discrepancies, work through this checklist.</p>
+
+      <ul class="content-requirements">
+        <li>Check <code>dtype</code> &mdash; librosa may use float64, MetalMom always uses float32</li>
+        <li>Check default parameters &mdash; some defaults may differ between versions</li>
+        <li>Check signal length &mdash; padding behavior can differ at boundaries</li>
+        <li>Check <code>center</code> parameter &mdash; STFT centering affects edge frames</li>
+        <li>Cast to float32 before comparing: <code>S_lr = S_lr.astype(np.float32)</code></li>
+      </ul>
+
+      <div class="content-note">
+        The most common source of false mismatches is dtype. librosa defaults to float64 in many paths. Cast both arrays to float32 before running <code>np.allclose</code> for a fair comparison.
+      </div>
+
+      <p>If the difference still seems like a bug, file an issue on GitHub with your input signal, parameters, and both outputs. Mom aims for identical results, but physics (and floating point) have opinions.</p>
+    </section>
+
+    <!-- Section 7: Next Steps -->
+    <section class="content-section" id="next-steps">
+      <h2>Next Steps</h2>
+      <p>Now that you know how to verify parity, explore more of what MetalMom can do.</p>
+
+      <ul class="content-links">
+        <li>
+          <a href="visualization.html">
+            <span class="arrow">&rarr;</span>
+            Visualizing Audio Features
+          </a>
+        </li>
+        <li>
+          <a href="beat-tracking.html">
+            <span class="arrow">&rarr;</span>
+            Beat Tracking a Song
+          </a>
+        </li>
+        <li>
+          <a href="../migration-librosa.html">
+            <span class="arrow">&rarr;</span>
+            Migration from librosa
+          </a>
+        </li>
+        <li>
+          <a href="../../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference
+          </a>
+        </li>
+      </ul>
+
+      <p class="content-closing">Mom shows her work. Always.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="../js/main.js"></script>
+</body>
+</html>

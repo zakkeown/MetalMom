@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batch Processing a Music Library — MetalMom</title>
+  <meta name="description" content="Analyze hundreds of audio tracks efficiently with MetalMom. Batch feature extraction, parallel processing, and performance tips.">
+  <meta property="og:title" content="Batch Processing a Music Library — MetalMom">
+  <meta property="og:description" content="Analyze hundreds of audio tracks efficiently with MetalMom. Batch feature extraction and performance tips.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="../index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="../getting-started.html">Getting Started</a>
+        <a href="../migration-librosa.html">Migration</a>
+        <a href="beat-tracking.html" class="active">Tutorials</a>
+        <a href="../benchmarks.html">Benchmarks</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Batch Processing a Music Library</h1>
+      <p class="content-subtitle">Analyze hundreds of tracks efficiently. Mom handles the queue.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Content
+       ============================================================ -->
+  <main class="content-page">
+
+    <!-- 1. Scan for Audio Files -->
+    <section class="content-section" id="scan-files">
+      <h2>Scan for Audio Files</h2>
+      <p>First, collect all audio files from a directory tree. MetalMom supports the common formats: MP3, WAV, FLAC, M4A, and AAC.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">from</span> <span class="var">pathlib</span> <span class="kw">import</span> <span class="var">Path</span>
+
+<span class="var">audio_dir</span> <span class="op">=</span> <span class="fn">Path</span><span class="op">(</span><span class="str">"~/Music/Library"</span><span class="op">).</span><span class="fn">expanduser</span><span class="op">()</span>
+<span class="var">audio_files</span> <span class="op">=</span> <span class="fn">sorted</span><span class="op">(</span>
+    <span class="var">p</span> <span class="kw">for</span> <span class="var">p</span> <span class="kw">in</span> <span class="var">audio_dir</span><span class="op">.</span><span class="fn">rglob</span><span class="op">(</span><span class="str">"*"</span><span class="op">)</span>
+    <span class="kw">if</span> <span class="var">p</span><span class="op">.</span><span class="var">suffix</span><span class="op">.</span><span class="fn">lower</span><span class="op">()</span> <span class="kw">in</span> <span class="op">{</span><span class="str">".mp3"</span><span class="op">,</span> <span class="str">".wav"</span><span class="op">,</span> <span class="str">".flac"</span><span class="op">,</span> <span class="str">".m4a"</span><span class="op">,</span> <span class="str">".aac"</span><span class="op">}</span>
+<span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Found </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">audio_files</span><span class="op">)</span><span class="op">}</span><span class="str"> audio files"</span><span class="op">)</span></code></pre>
+      </div>
+    </section>
+
+    <!-- 2. Extract Features from Each File -->
+    <section class="content-section" id="extract-features">
+      <h2>Extract Features from Each File</h2>
+      <p>Loop through files, compute tempo, chroma, and MFCCs, and collect the results. The <code>try/except</code> block ensures one bad file doesn't stop the entire run.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">metalmom</span>
+<span class="kw">import</span> <span class="var">json</span>
+
+<span class="var">results</span> <span class="op">=</span> <span class="op">[]</span>
+<span class="kw">for</span> <span class="var">i</span><span class="op">,</span> <span class="var">path</span> <span class="kw">in</span> <span class="fn">enumerate</span><span class="op">(</span><span class="var">audio_files</span><span class="op">):</span>
+    <span class="kw">try</span><span class="op">:</span>
+        <span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="fn">str</span><span class="op">(</span><span class="var">path</span><span class="op">),</span> <span class="arg">sr</span><span class="op">=</span><span class="var">22050</span><span class="op">,</span> <span class="arg">mono</span><span class="op">=</span><span class="var">True</span><span class="op">)</span>
+
+        <span class="var">tempo</span><span class="op">,</span> <span class="var">beats</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+        <span class="var">chroma</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">chroma_stft</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+        <span class="var">mfcc</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">mfcc</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">n_mfcc</span><span class="op">=</span><span class="var">13</span><span class="op">)</span>
+
+        <span class="var">results</span><span class="op">.</span><span class="fn">append</span><span class="op">({</span>
+            <span class="str">"file"</span><span class="op">:</span> <span class="fn">str</span><span class="op">(</span><span class="var">path</span><span class="op">),</span>
+            <span class="str">"duration"</span><span class="op">:</span> <span class="fn">len</span><span class="op">(</span><span class="var">y</span><span class="op">)</span> <span class="op">/</span> <span class="var">sr</span><span class="op">,</span>
+            <span class="str">"tempo"</span><span class="op">:</span> <span class="fn">float</span><span class="op">(</span><span class="var">tempo</span><span class="op">),</span>
+            <span class="str">"n_beats"</span><span class="op">:</span> <span class="fn">len</span><span class="op">(</span><span class="var">beats</span><span class="op">),</span>
+            <span class="str">"mean_chroma"</span><span class="op">:</span> <span class="var">chroma</span><span class="op">.</span><span class="fn">mean</span><span class="op">(</span><span class="arg">axis</span><span class="op">=</span><span class="var">1</span><span class="op">).</span><span class="fn">tolist</span><span class="op">(),</span>
+            <span class="str">"mean_mfcc"</span><span class="op">:</span> <span class="var">mfcc</span><span class="op">.</span><span class="fn">mean</span><span class="op">(</span><span class="arg">axis</span><span class="op">=</span><span class="var">1</span><span class="op">).</span><span class="fn">tolist</span><span class="op">(),</span>
+        <span class="op">})</span>
+
+        <span class="kw">if</span> <span class="op">(</span><span class="var">i</span> <span class="op">+</span> <span class="var">1</span><span class="op">)</span> <span class="op">%</span> <span class="var">10</span> <span class="op">==</span> <span class="var">0</span><span class="op">:</span>
+            <span class="fn">print</span><span class="op">(</span><span class="str">f"Processed </span><span class="op">{</span><span class="var">i</span> <span class="op">+</span> <span class="var">1</span><span class="op">}</span><span class="str">/</span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">audio_files</span><span class="op">)</span><span class="op">}</span><span class="str">"</span><span class="op">)</span>
+    <span class="kw">except</span> <span class="var">Exception</span> <span class="kw">as</span> <span class="var">e</span><span class="op">:</span>
+        <span class="fn">print</span><span class="op">(</span><span class="str">f"Error processing </span><span class="op">{</span><span class="var">path</span><span class="op">.</span><span class="var">name</span><span class="op">}</span><span class="str">: </span><span class="op">{</span><span class="var">e</span><span class="op">}</span><span class="str">"</span><span class="op">)</span>
+
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Successfully analyzed </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">results</span><span class="op">)</span><span class="op">}</span><span class="str"> tracks"</span><span class="op">)</span></code></pre>
+      </div>
+    </section>
+
+    <!-- 3. Save Results -->
+    <section class="content-section" id="save-results">
+      <h2>Save Results</h2>
+      <p>Write the collected features to JSON for full-fidelity storage, or CSV for quick spreadsheet analysis.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">with</span> <span class="fn">open</span><span class="op">(</span><span class="str">"library_analysis.json"</span><span class="op">,</span> <span class="str">"w"</span><span class="op">)</span> <span class="kw">as</span> <span class="var">f</span><span class="op">:</span>
+    <span class="var">json</span><span class="op">.</span><span class="fn">dump</span><span class="op">(</span><span class="var">results</span><span class="op">,</span> <span class="var">f</span><span class="op">,</span> <span class="arg">indent</span><span class="op">=</span><span class="var">2</span><span class="op">)</span>
+
+<span class="cm"># Or as CSV</span>
+<span class="kw">import</span> <span class="var">csv</span>
+
+<span class="kw">with</span> <span class="fn">open</span><span class="op">(</span><span class="str">"library_analysis.csv"</span><span class="op">,</span> <span class="str">"w"</span><span class="op">,</span> <span class="arg">newline</span><span class="op">=</span><span class="str">""</span><span class="op">)</span> <span class="kw">as</span> <span class="var">f</span><span class="op">:</span>
+    <span class="var">writer</span> <span class="op">=</span> <span class="var">csv</span><span class="op">.</span><span class="fn">DictWriter</span><span class="op">(</span><span class="var">f</span><span class="op">,</span> <span class="arg">fieldnames</span><span class="op">=[</span><span class="str">"file"</span><span class="op">,</span> <span class="str">"duration"</span><span class="op">,</span> <span class="str">"tempo"</span><span class="op">,</span> <span class="str">"n_beats"</span><span class="op">])</span>
+    <span class="var">writer</span><span class="op">.</span><span class="fn">writeheader</span><span class="op">()</span>
+    <span class="kw">for</span> <span class="var">r</span> <span class="kw">in</span> <span class="var">results</span><span class="op">:</span>
+        <span class="var">writer</span><span class="op">.</span><span class="fn">writerow</span><span class="op">({</span><span class="var">k</span><span class="op">:</span> <span class="var">r</span><span class="op">[</span><span class="var">k</span><span class="op">]</span> <span class="kw">for</span> <span class="var">k</span> <span class="kw">in</span> <span class="op">[</span><span class="str">"file"</span><span class="op">,</span> <span class="str">"duration"</span><span class="op">,</span> <span class="str">"tempo"</span><span class="op">,</span> <span class="str">"n_beats"</span><span class="op">]})</span></code></pre>
+      </div>
+    </section>
+
+    <!-- 4. Performance Tips -->
+    <section class="content-section" id="performance-tips">
+      <h2>Performance Tips</h2>
+
+      <div class="content-note">
+        <strong>Thread safety:</strong> MetalMom's context (<code>mm_context</code>) is NOT thread-safe &mdash; one per thread. For parallel processing, use <code>multiprocessing</code>, not <code>threading</code>.
+      </div>
+
+      <p>You can parallelize across files using Python's <code>multiprocessing</code> module. Each worker process gets its own context automatically.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">from</span> <span class="var">multiprocessing</span> <span class="kw">import</span> <span class="var">Pool</span>
+
+<span class="kw">def</span> <span class="fn">analyze_file</span><span class="op">(</span><span class="var">path</span><span class="op">):</span>
+    <span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="fn">str</span><span class="op">(</span><span class="var">path</span><span class="op">),</span> <span class="arg">sr</span><span class="op">=</span><span class="var">22050</span><span class="op">,</span> <span class="arg">mono</span><span class="op">=</span><span class="var">True</span><span class="op">)</span>
+    <span class="var">tempo</span><span class="op">,</span> <span class="var">beats</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+    <span class="kw">return</span> <span class="op">{</span><span class="str">"file"</span><span class="op">:</span> <span class="fn">str</span><span class="op">(</span><span class="var">path</span><span class="op">),</span> <span class="str">"tempo"</span><span class="op">:</span> <span class="fn">float</span><span class="op">(</span><span class="var">tempo</span><span class="op">)}</span>
+
+<span class="kw">with</span> <span class="fn">Pool</span><span class="op">(</span><span class="var">4</span><span class="op">)</span> <span class="kw">as</span> <span class="var">pool</span><span class="op">:</span>
+    <span class="var">results</span> <span class="op">=</span> <span class="var">pool</span><span class="op">.</span><span class="fn">map</span><span class="op">(</span><span class="var">analyze_file</span><span class="op">,</span> <span class="var">audio_files</span><span class="op">)</span></code></pre>
+      </div>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Tip</th>
+              <th>Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Use <code>sr=22050</code> for analysis</td>
+              <td>Half the samples, same quality for most features</td>
+            </tr>
+            <tr>
+              <td>Set <code>mono=True</code></td>
+              <td>Halves memory, most features are mono anyway</td>
+            </tr>
+            <tr>
+              <td>Use <code>multiprocessing</code>, not <code>threading</code></td>
+              <td>mm_context is not thread-safe</td>
+            </tr>
+            <tr>
+              <td>Process in batches of 100</td>
+              <td>Keeps memory bounded</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="mom-quote">Mom processes the whole playlist before the kids get home.</p>
+    </section>
+
+    <!-- 5. Next Steps -->
+    <section class="content-section" id="next-steps">
+      <h2>Next Steps</h2>
+      <p>Your library is analyzed. Here's where to go next.</p>
+
+      <ul class="content-links">
+        <li>
+          <a href="chord-analysis.html">
+            <span class="arrow">&rarr;</span>
+            Chord Analysis tutorial
+          </a>
+        </li>
+        <li>
+          <a href="beat-tracking.html">
+            <span class="arrow">&rarr;</span>
+            Beat Tracking tutorial
+          </a>
+        </li>
+        <li>
+          <a href="../benchmarks.html">
+            <span class="arrow">&rarr;</span>
+            Benchmarks
+          </a>
+        </li>
+        <li>
+          <a href="../../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference
+          </a>
+        </li>
+      </ul>
+
+      <p class="content-closing">Now go analyze everything.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="../js/main.js"></script>
+</body>
+</html>

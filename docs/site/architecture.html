@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture — MetalMom</title>
+  <meta name="description" content="MetalMom architecture overview — Swift core, Metal GPU backend, Smart Dispatch, and the full stack from Python to silicon.">
+  <meta property="og:title" content="Architecture — MetalMom">
+  <meta property="og:description" content="What's under Mom's hood. Swift, Metal, and a whole lot of signal processing.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Architecture-specific overrides -->
+  <style>
+    /* Wider content area for the architecture diagram */
+    .content-page.content-page--arch {
+      max-width: 920px;
+    }
+
+    /* Architecture diagram code block: ensure it doesn't wrap */
+    .arch-diagram pre {
+      font-size: clamp(0.625rem, 0.55rem + 0.4vw, 0.875rem);
+      line-height: 1.5;
+      white-space: pre;
+    }
+
+    /* Numbered list styling for content sections */
+    .content-section ol {
+      list-style: none;
+      counter-reset: arch-step;
+      padding: 0;
+      margin: 1rem 0 1.25rem;
+    }
+
+    .content-section ol li {
+      counter-increment: arch-step;
+      position: relative;
+      padding: 0.625rem 0 0.625rem 2.25rem;
+      color: var(--text-secondary);
+      font-size: 0.9375rem;
+      line-height: 1.7;
+    }
+
+    .content-section ol li::before {
+      content: counter(arch-step) ".";
+      position: absolute;
+      left: 0;
+      color: var(--accent-warm);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .content-section ol li strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Bullet list styling */
+    .content-section ul.content-bullets {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0 1.25rem;
+    }
+
+    .content-section ul.content-bullets li {
+      position: relative;
+      padding: 0.375rem 0 0.375rem 1.5rem;
+      color: var(--text-secondary);
+      font-size: 0.9375rem;
+      line-height: 1.7;
+    }
+
+    .content-section ul.content-bullets li::before {
+      content: '\2022';
+      position: absolute;
+      left: 0;
+      color: var(--accent-warm);
+      font-weight: 700;
+    }
+
+    .content-section ul.content-bullets li strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="getting-started.html">Getting Started</a>
+        <a href="migration-librosa.html">Migration</a>
+        <a href="tutorials/beat-tracking.html">Tutorials</a>
+        <a href="benchmarks.html">Benchmarks</a>
+        <a href="architecture.html" class="active">Architecture</a>
+        <a href="../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero (smaller than homepage)
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Architecture</h1>
+      <p class="content-subtitle">What's under Mom's hood. Swift, Metal, and a whole lot of signal processing.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Content
+       ============================================================ -->
+  <main class="content-page content-page--arch">
+
+    <!-- System Overview -->
+    <section class="content-section" id="system-overview">
+      <h2>System Overview</h2>
+      <p>The full stack, top to bottom. Python at the surface, silicon at the core.</p>
+
+      <div class="content-code-block code-block arch-diagram">
+        <div class="code-block-header">
+          <span class="code-block-label">Architecture</span>
+        </div>
+        <pre><code>&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;                  Python Layer                    &#9474;
+&#9474;  metalmom.load()  metalmom.melspectrogram()  ... &#9474;
+&#9474;          &#9660;                                       &#9474;
+&#9474;    cffi (dlopen + GIL release)                   &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+                       &#9474; C ABI
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9660;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;              MetalMomBridge (Swift)               &#9474;
+&#9474;         @_cdecl exported functions                &#9474;
+&#9474;     mm_stft()  mm_melspectrogram()  mm_beat()     &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+                       &#9474;
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9660;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;              MetalMomCore (Swift)                 &#9474;
+&#9474;                                                   &#9474;
+&#9474;  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;               &#9474;
+&#9474;  &#9474; Smart       &#9474;  &#9474; Compute      &#9474;               &#9474;
+&#9474;  &#9474; Dispatch    &#9474;  &#9474; Operations   &#9474;               &#9474;
+&#9474;  &#9474;             &#9474;  &#9474; (Protocol)   &#9474;               &#9474;
+&#9474;  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;               &#9474;
+&#9474;         &#9474;                                         &#9474;
+&#9474;  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9660;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;     &#9474;
+&#9474;  &#9474;    Metal    MPSGraph   Accelerate  CoreML&#9474;     &#9474;
+&#9474;  &#9474;   Shaders    (FFT)     (vDSP)    (Neural)&#9474;     &#9474;
+&#9474;  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;     &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+                       &#9474;
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9660;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&#9474;              MetalMomCBridge (C)                  &#9474;
+&#9474;    MMBuffer struct, status codes, param structs   &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</code></pre>
+      </div>
+
+      <p>Four layers, each with a single responsibility. Python talks to Swift through a stable C ABI. Swift does the heavy lifting. Metal and Accelerate do the math. Mom keeps the layers clean so you don't have to think about them.</p>
+    </section>
+
+    <!-- Three SPM Targets -->
+    <section class="content-section" id="spm-targets">
+      <h2>Three SPM Targets</h2>
+      <p>The Swift side is structured as three Swift Package Manager targets, each with a clear role.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Target</th>
+              <th>Language</th>
+              <th>Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>MetalMomCBridge</code></td>
+              <td>C (header only)</td>
+              <td>Defines shared types: MMBuffer, status codes, parameter structs</td>
+            </tr>
+            <tr>
+              <td><code>MetalMomCore</code></td>
+              <td>Swift</td>
+              <td>Engine: all compute operations, Smart Dispatch, Metal/Accelerate backends</td>
+            </tr>
+            <tr>
+              <td><code>MetalMomBridge</code></td>
+              <td>Swift</td>
+              <td><code>@_cdecl</code> exports: C-callable functions that Python calls via cffi</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Dependencies flow upward: CBridge &#8592; Core &#8592; Bridge. Python calls Bridge, Bridge calls Core, Core uses CBridge types for the return trip.</p>
+    </section>
+
+    <!-- Smart Dispatch -->
+    <section class="content-section" id="smart-dispatch">
+      <h2>Smart Dispatch</h2>
+      <p>Every compute operation conforms to the <code>ComputeOperation</code> protocol, which defines both a CPU path (Accelerate/vDSP) and a GPU path (Metal/MPSGraph). Smart Dispatch picks the fastest one based on input size.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>GPU Backend</th>
+              <th>Threshold</th>
+              <th>Below Threshold</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>STFT</td>
+              <td><span class="backend-metal">MPSGraph</span></td>
+              <td><code>&gt; 8,192 samples</code></td>
+              <td><span class="backend-accelerate">Accelerate vDSP</span></td>
+            </tr>
+            <tr>
+              <td>Elementwise</td>
+              <td><span class="backend-metal">Metal shader</span></td>
+              <td><code>&gt; 65,536 elements</code></td>
+              <td><span class="backend-accelerate">vDSP</span></td>
+            </tr>
+            <tr>
+              <td>Matrix multiply</td>
+              <td><span class="backend-metal">MPS</span></td>
+              <td><code>&gt; 512&times;512</code></td>
+              <td><span class="backend-accelerate">Accelerate BLAS</span></td>
+            </tr>
+            <tr>
+              <td>Reduction</td>
+              <td><span class="backend-metal">Metal shader</span></td>
+              <td><code>&gt; 131,072 elements</code></td>
+              <td><span class="backend-accelerate">vDSP</span></td>
+            </tr>
+            <tr>
+              <td>Convolution</td>
+              <td><span class="backend-metal">Metal shader</span></td>
+              <td><code>&gt; 32,768 elements</code></td>
+              <td><span class="backend-accelerate">vDSP</span></td>
+            </tr>
+            <tr>
+              <td>MFCC pipeline</td>
+              <td><span class="backend-metal">Metal (fused)</span></td>
+              <td><code>&gt; 8,192 samples</code></td>
+              <td><span class="backend-accelerate">Accelerate</span></td>
+            </tr>
+            <tr>
+              <td>Neural inference</td>
+              <td><span class="backend-metal">CoreML / ANE</span></td>
+              <td>Always</td>
+              <td>&mdash;</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Below these thresholds, Accelerate is faster due to Metal command buffer overhead. Mom knows the exact crossover points for each operation on each chip.</p>
+
+      <div class="content-note">
+        These thresholds are tuned for M1&ndash;M4. The protocol allows per-chip profiles, so future chips can have different crossovers.
+      </div>
+    </section>
+
+    <!-- Memory Model -->
+    <section class="content-section" id="memory-model">
+      <h2>Memory Model</h2>
+      <p>MetalMom uses a minimal-copy design:</p>
+
+      <ol>
+        <li><strong>Python &rarr; Swift:</strong> NumPy array data is passed through cffi as a float pointer. Swift copies it into a Signal (<code>UnsafeMutableBufferPointer&lt;Float&gt;</code>) for stable pointer addresses during Metal/Accelerate operations.</li>
+        <li><strong>Swift &rarr; Python:</strong> Results are packed into an <code>MMBuffer</code> struct (float pointer + shape array). Python copies the data into a NumPy array, then immediately frees the C-side buffer.</li>
+      </ol>
+
+      <p>It's not zero-copy, but it's minimal-copy &mdash; two copies total (in and out). The actual compute happens on pinned memory that's safe for Metal, Accelerate, and the C ABI. Mom doesn't waste a single byte she doesn't have to.</p>
+    </section>
+
+    <!-- GIL Release -->
+    <section class="content-section" id="gil-release">
+      <h2>GIL Release</h2>
+      <p>cffi releases Python's Global Interpreter Lock (GIL) during native function calls. This means:</p>
+
+      <ul class="content-bullets">
+        <li>MetalMom compute runs truly parallel to Python threads</li>
+        <li>Multiple MetalMom operations can overlap if called from different threads</li>
+        <li><strong>BUT:</strong> <code>mm_context</code> is not thread-safe &mdash; use one context per thread</li>
+      </ul>
+
+      <p>This is why batch processing should use <code>multiprocessing</code>, not <code>threading</code>. Each process gets its own context.</p>
+    </section>
+
+    <!-- CoreML Integration -->
+    <section class="content-section" id="coreml-integration">
+      <h2>CoreML Integration</h2>
+      <p>67 pretrained models from madmom were converted to CoreML format:</p>
+
+      <ul class="content-bullets">
+        <li>Models extracted from pickle files using a SafeUnpickler (no madmom import needed)</li>
+        <li>Converted via Apple's NeuralNetworkBuilder (not PyTorch export) to support peephole LSTMs</li>
+        <li>9 model families: beats, onsets, downbeats, tempo, key, chords, notes, spectral onsets, pattern tracking</li>
+        <li>Models run on GPU or Apple Neural Engine (ANE) via CoreML's automatic dispatch</li>
+      </ul>
+
+      <p>Model weights are CC-BY-NC-SA 4.0 licensed (same as original madmom). Source code is MIT.</p>
+    </section>
+
+    <!-- Why This Architecture -->
+    <section class="content-section" id="why-this-architecture">
+      <h2>Why This Architecture</h2>
+      <p>Three design principles drove the architecture:</p>
+
+      <ol>
+        <li><strong>Transparent dispatch</strong> &mdash; Users never think about GPU vs CPU. Smart Dispatch handles it. Same API regardless of backend.</li>
+        <li><strong>Unified memory</strong> &mdash; Apple Silicon's unified memory means no GPU&#8596;CPU data transfers. Metal and Accelerate share the same physical memory. This is why MetalMom is fast on Apple Silicon and wouldn't make sense on discrete-GPU architectures.</li>
+        <li><strong>Pipeline fusion</strong> &mdash; Operations like MFCC (STFT &rarr; mel filterbank &rarr; log &rarr; DCT) run as a single fused Metal pipeline instead of 4 separate passes, eliminating intermediate memory allocations.</li>
+      </ol>
+
+      <p>Mom designed the architecture around Apple Silicon's strengths. This isn't a generic GPU library &mdash; it's built specifically for the hardware.</p>
+    </section>
+
+    <!-- Next Steps -->
+    <section class="content-section" id="next-steps">
+      <h2>Next Steps</h2>
+      <p>Now you know how Mom works. Go use her.</p>
+
+      <ul class="content-links">
+        <li>
+          <a href="../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference
+          </a>
+        </li>
+        <li>
+          <a href="benchmarks.html">
+            <span class="arrow">&rarr;</span>
+            Benchmarks
+          </a>
+        </li>
+        <li>
+          <a href="getting-started.html">
+            <span class="arrow">&rarr;</span>
+            Getting Started
+          </a>
+        </li>
+      </ul>
+
+      <p class="content-closing">Forged in Metal. Raised by Mom.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/main.js"></script>
+</body>
+</html>

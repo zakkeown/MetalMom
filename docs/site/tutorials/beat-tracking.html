@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beat Tracking a Song — MetalMom</title>
+  <meta name="description" content="Step-by-step beat tracking tutorial with MetalMom. From audio file to beat positions in under 10 lines of Python.">
+  <meta property="og:title" content="Beat Tracking a Song — MetalMom">
+  <meta property="og:description" content="From audio file to beat positions in under 10 lines. Signal processing and neural approaches.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="../index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="../getting-started.html">Getting Started</a>
+        <a href="../migration-librosa.html">Migration</a>
+        <a href="beat-tracking.html" class="active">Tutorials</a>
+        <a href="../benchmarks.html">Benchmarks</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Beat Tracking a Song</h1>
+      <p class="content-subtitle">From audio file to beat positions in under 10 lines. Mom keeps the tempo.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Content
+       ============================================================ -->
+  <main class="content-page">
+
+    <!-- Section 1: Load Your Audio -->
+    <section class="content-section" id="load-audio">
+      <h2>1. Load Your Audio</h2>
+      <p>Start by loading an audio file. MetalMom uses AVFoundation under the hood, so it handles MP3, WAV, FLAC, AAC, M4A, and more &mdash; anything macOS can decode, Mom can load.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">metalmom</span>
+
+<span class="cm"># Load an audio file (any format macOS supports)</span>
+<span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="str">"my_song.mp3"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Loaded </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">y</span><span class="op">)</span><span class="op">/</span><span class="var">sr</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str">s of audio at </span><span class="op">{</span><span class="var">sr</span><span class="op">}</span><span class="str"> Hz"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p>The <code>load</code> function returns a NumPy array of audio samples and the sample rate. By default it resamples to 22050 Hz and mixes to mono, just like librosa.</p>
+    </section>
+
+    <!-- Section 2: Simple Beat Tracking -->
+    <section class="content-section" id="simple-beat-tracking">
+      <h2>2. Simple Beat Tracking</h2>
+      <p>The signal-processing approach uses onset detection and autocorrelation to find the tempo and beat positions. Fast, reliable, and no models required.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="cm"># Track beats &mdash; returns tempo and beat frame indices</span>
+<span class="var">tempo</span><span class="op">,</span> <span class="var">beat_frames</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+
+<span class="cm"># Convert frame indices to time in seconds</span>
+<span class="var">beat_times</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">frames_to_time</span><span class="op">(</span><span class="var">beat_frames</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Tempo: </span><span class="op">{</span><span class="var">tempo</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str"> BPM"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Found </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">beat_times</span><span class="op">)</span><span class="op">}</span><span class="str"> beats"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"First 5 beats: </span><span class="op">{</span><span class="var">beat_times</span><span class="op">[:</span><span class="var">5</span><span class="op">]</span><span class="op">}</span><span class="str">"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p><code>beat_track</code> returns frame indices, not timestamps. Use <code>frames_to_time</code> to convert them to seconds. This two-step pattern keeps the API flexible &mdash; you can work in whichever domain suits your task.</p>
+    </section>
+
+    <!-- Section 3: Visualize Beats on a Waveform -->
+    <section class="content-section" id="visualize-beats">
+      <h2>3. Visualize Beats on a Waveform</h2>
+      <p>Seeing is believing. Plot the waveform and overlay the detected beat positions as vertical lines.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+
+<span class="cm"># Plot waveform</span>
+<span class="var">fig</span><span class="op">,</span> <span class="var">ax</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">4</span><span class="op">))</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">waveshow</span><span class="op">(</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">,</span> <span class="arg">alpha</span><span class="op">=</span><span class="var">0.6</span><span class="op">)</span>
+
+<span class="cm"># Overlay beat positions</span>
+<span class="kw">for</span> <span class="var">bt</span> <span class="kw">in</span> <span class="var">beat_times</span><span class="op">:</span>
+    <span class="var">ax</span><span class="op">.</span><span class="fn">axvline</span><span class="op">(</span><span class="arg">x</span><span class="op">=</span><span class="var">bt</span><span class="op">,</span> <span class="arg">color</span><span class="op">=</span><span class="str">'#f59e0b'</span><span class="op">,</span> <span class="arg">alpha</span><span class="op">=</span><span class="var">0.7</span><span class="op">,</span> <span class="arg">linewidth</span><span class="op">=</span><span class="var">1</span><span class="op">)</span>
+
+<span class="var">ax</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Beats detected by MetalMom"</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+
+      <div class="content-note">
+        Requires <code>pip install metalmom[display]</code> for matplotlib support.
+      </div>
+    </section>
+
+    <!-- Section 4: Neural Beat Tracking -->
+    <section class="content-section" id="neural-beat-tracking">
+      <h2>4. Neural Beat Tracking</h2>
+      <p>When simple signal processing isn't enough, bring in the neural network ensemble. This approach uses 8 pre-trained CoreML models running in parallel, feeding into a Dynamic Bayesian Network for state-of-the-art beat tracking.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">from</span> <span class="var">metalmom.compat.madmom.features.beats</span> <span class="kw">import</span> <span class="op">(</span>
+    <span class="var">RNNBeatProcessor</span><span class="op">,</span>
+    <span class="var">DBNBeatTrackingProcessor</span><span class="op">,</span>
+<span class="op">)</span>
+
+<span class="cm"># RNN ensemble computes beat activations</span>
+<span class="var">proc</span> <span class="op">=</span> <span class="fn">RNNBeatProcessor</span><span class="op">()</span>
+<span class="var">activations</span> <span class="op">=</span> <span class="var">proc</span><span class="op">(</span><span class="var">y</span><span class="op">)</span>
+
+<span class="cm"># Dynamic Bayesian Network tracks beats from activations</span>
+<span class="var">tracker</span> <span class="op">=</span> <span class="fn">DBNBeatTrackingProcessor</span><span class="op">(</span><span class="arg">fps</span><span class="op">=</span><span class="var">100</span><span class="op">)</span>
+<span class="var">beats</span> <span class="op">=</span> <span class="var">tracker</span><span class="op">(</span><span class="var">activations</span><span class="op">)</span>
+
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Neural beats: </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">beats</span><span class="op">)</span><span class="op">}</span><span class="str"> detected"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"First 5: </span><span class="op">{</span><span class="var">beats</span><span class="op">[:</span><span class="var">5</span><span class="op">]</span><span class="op">}</span><span class="str">"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p>The neural approach uses 8 pre-trained CoreML models running in an ensemble. More accurate than the signal-processing approach, especially for complex music with syncopation, tempo changes, or unusual time signatures. Mom brought the big guns.</p>
+    </section>
+
+    <!-- Section 5: Comparing Results -->
+    <section class="content-section" id="comparing-results">
+      <h2>5. Comparing Results</h2>
+      <p>Which approach should you use? It depends on your needs.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Approach</th>
+              <th>Speed</th>
+              <th>Accuracy</th>
+              <th>Best For</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>beat_track()</code></td>
+              <td>Signal processing (onset + autocorrelation)</td>
+              <td>Fast</td>
+              <td>Good</td>
+              <td>Simple rhythms, real-time</td>
+            </tr>
+            <tr>
+              <td><code>RNNBeatProcessor</code> + <code>DBNBeatTrackingProcessor</code></td>
+              <td>Neural network ensemble + DBN</td>
+              <td>Slower</td>
+              <td>Excellent</td>
+              <td>Complex music, offline analysis</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>For most production workloads, start with <code>beat_track()</code>. If accuracy matters more than speed &mdash; say, for annotation tools or musicological analysis &mdash; reach for the neural pipeline. Either way, Mom's got you covered.</p>
+    </section>
+
+    <!-- Section 6: Export Beat Times -->
+    <section class="content-section" id="export-beats">
+      <h2>6. Export Beat Times</h2>
+      <p>Once you have your beat positions, you'll probably want to save them. Here are two common formats.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">json</span>
+
+<span class="cm"># Save as JSON</span>
+<span class="var">beat_data</span> <span class="op">=</span> <span class="op">{</span>
+    <span class="str">"tempo_bpm"</span><span class="op">:</span> <span class="fn">float</span><span class="op">(</span><span class="var">tempo</span><span class="op">),</span>
+    <span class="str">"beats"</span><span class="op">:</span> <span class="op">[</span><span class="fn">float</span><span class="op">(</span><span class="var">t</span><span class="op">)</span> <span class="kw">for</span> <span class="var">t</span> <span class="kw">in</span> <span class="var">beat_times</span><span class="op">],</span>
+<span class="op">}</span>
+<span class="kw">with</span> <span class="fn">open</span><span class="op">(</span><span class="str">"beats.json"</span><span class="op">,</span> <span class="str">"w"</span><span class="op">)</span> <span class="kw">as</span> <span class="var">f</span><span class="op">:</span>
+    <span class="var">json</span><span class="op">.</span><span class="fn">dump</span><span class="op">(</span><span class="var">beat_data</span><span class="op">,</span> <span class="var">f</span><span class="op">,</span> <span class="arg">indent</span><span class="op">=</span><span class="var">2</span><span class="op">)</span>
+
+<span class="cm"># Or as a simple text file (one beat per line)</span>
+<span class="kw">with</span> <span class="fn">open</span><span class="op">(</span><span class="str">"beats.txt"</span><span class="op">,</span> <span class="str">"w"</span><span class="op">)</span> <span class="kw">as</span> <span class="var">f</span><span class="op">:</span>
+    <span class="kw">for</span> <span class="var">t</span> <span class="kw">in</span> <span class="var">beat_times</span><span class="op">:</span>
+        <span class="var">f</span><span class="op">.</span><span class="fn">write</span><span class="op">(</span><span class="str">f"</span><span class="op">{</span><span class="var">t</span><span class="op">:</span><span class="str">.4f</span><span class="op">}</span><span class="str">\n"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p>The JSON format is handy for web apps and APIs. The text format is compatible with tools like Sonic Visualiser and Audacity label tracks.</p>
+    </section>
+
+    <!-- Section 7: Next Steps -->
+    <section class="content-section" id="next-steps">
+      <h2>7. Next Steps</h2>
+      <p>You've tracked beats with both signal processing and neural networks. Here's where to go from here.</p>
+
+      <ul class="content-links">
+        <li>
+          <a href="chord-analysis.html">
+            <span class="arrow">&rarr;</span>
+            Tutorial: Chord Analysis
+          </a>
+        </li>
+        <li>
+          <a href="visualization.html">
+            <span class="arrow">&rarr;</span>
+            Tutorial: Visualization
+          </a>
+        </li>
+        <li>
+          <a href="../../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference: metalmom.beat
+          </a>
+        </li>
+        <li>
+          <a href="../../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference: metalmom.compat.madmom.features.beats
+          </a>
+        </li>
+      </ul>
+
+      <p class="content-closing">Now go make some beats. Or at least find them.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="../js/main.js"></script>
+</body>
+</html>

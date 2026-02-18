@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Building a Chord Analyzer — MetalMom</title>
+  <meta name="description" content="Detect chord progressions in any song with MetalMom. Chroma features, chord detection, neural chord recognition, and export.">
+  <meta property="og:title" content="Building a Chord Analyzer — MetalMom">
+  <meta property="og:description" content="Detect chord progressions in any song with MetalMom. Chroma features, chord detection, and neural recognition.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="../index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="../getting-started.html">Getting Started</a>
+        <a href="../migration-librosa.html">Migration</a>
+        <a href="beat-tracking.html" class="active">Tutorials</a>
+        <a href="../benchmarks.html">Benchmarks</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Building a Chord Analyzer</h1>
+      <p class="content-subtitle">Detect chord progressions in any song. Mom's got perfect pitch.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Content
+       ============================================================ -->
+  <main class="content-page">
+
+    <!-- 1. Load and Prepare -->
+    <section class="content-section" id="load-and-prepare">
+      <h2>Load and Prepare</h2>
+      <p>Start by loading an audio file. MetalMom supports MP3, WAV, FLAC, M4A, and AAC out of the box.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">metalmom</span>
+
+<span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="str">"song.mp3"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Loaded </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">y</span><span class="op">)</span> <span class="op">/</span> <span class="var">sr</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str"> seconds at </span><span class="op">{</span><span class="var">sr</span><span class="op">}</span><span class="str"> Hz"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p>The <code>load</code> function returns the audio signal as a NumPy array and the sample rate. By default it resamples to 22050 Hz and mixes to mono &mdash; ideal for most analysis tasks.</p>
+    </section>
+
+    <!-- 2. Compute Chroma Features -->
+    <section class="content-section" id="chroma-features">
+      <h2>Compute Chroma Features</h2>
+      <p>Chroma features map audio energy onto the 12 pitch classes (C, C#, D, &hellip; B). They're the foundation of chord analysis. MetalMom provides two methods.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="cm"># Chroma via STFT</span>
+<span class="var">chroma</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">chroma_stft</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">n_chroma</span><span class="op">=</span><span class="var">12</span><span class="op">)</span>
+
+<span class="cm"># Or via CQT (better frequency resolution for low notes)</span>
+<span class="var">chroma_cq</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">chroma_cqt</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span></code></pre>
+      </div>
+
+      <div class="content-note">
+        <strong>STFT vs CQT chroma:</strong> STFT-based chroma is faster and works well for most music. CQT-based chroma has better frequency resolution at low pitches, making it a stronger choice for bass-heavy or detuned material.
+      </div>
+    </section>
+
+    <!-- 3. Visualize Chroma -->
+    <section class="content-section" id="visualize-chroma">
+      <h2>Visualize Chroma</h2>
+      <p>A chromagram is the standard way to see pitch class energy over time. Use <code>metalmom.display.specshow</code> to plot it.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+
+<span class="var">fig</span><span class="op">,</span> <span class="var">ax</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">4</span><span class="op">))</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">specshow</span><span class="op">(</span><span class="var">chroma</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">x_axis</span><span class="op">=</span><span class="str">'time'</span><span class="op">,</span> <span class="arg">y_axis</span><span class="op">=</span><span class="str">'chroma'</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">)</span>
+<span class="var">ax</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Chromagram"</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">colorbar</span><span class="op">(</span><span class="arg">mappable</span><span class="op">=</span><span class="var">ax</span><span class="op">.</span><span class="var">images</span><span class="op">[</span><span class="var">0</span><span class="op">])</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+
+      <p>The rows represent pitch classes (C at the bottom, B at the top). Bright columns reveal the dominant notes at each moment &mdash; patterns that directly correspond to chords.</p>
+    </section>
+
+    <!-- 4. Detect Chords -->
+    <section class="content-section" id="detect-chords">
+      <h2>Detect Chords</h2>
+      <p>The <code>chord_detect</code> function analyzes chroma features and returns time-stamped chord labels.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">chords</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">chord_detect</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+<span class="kw">for</span> <span class="var">chord</span> <span class="kw">in</span> <span class="var">chords</span><span class="op">[:</span><span class="var">10</span><span class="op">]:</span>
+    <span class="fn">print</span><span class="op">(</span><span class="str">f"  </span><span class="op">{</span><span class="var">chord</span><span class="op">[</span><span class="str">'start'</span><span class="op">]:</span><span class="str">.2f</span><span class="op">}</span><span class="str">s - </span><span class="op">{</span><span class="var">chord</span><span class="op">[</span><span class="str">'end'</span><span class="op">]:</span><span class="str">.2f</span><span class="op">}</span><span class="str">s: </span><span class="op">{</span><span class="var">chord</span><span class="op">[</span><span class="str">'label'</span><span class="op">]}</span><span class="str">"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p>Each chord is a dictionary with <code>start</code> and <code>end</code> times (in seconds) and a <code>label</code> string like <code>"C:maj"</code>, <code>"A:min"</code>, or <code>"G:7"</code>.</p>
+    </section>
+
+    <!-- 5. Neural Chord Recognition -->
+    <section class="content-section" id="neural-chord-recognition">
+      <h2>Neural Chord Recognition</h2>
+      <p>For higher accuracy, use the deep learning pipeline from the madmom compatibility layer. This runs a CoreML-accelerated deep chroma model under the hood.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">from</span> <span class="var">metalmom.compat.madmom.features.chords</span> <span class="kw">import</span> <span class="var">DeepChromaChordRecognitionProcessor</span>
+
+<span class="var">proc</span> <span class="op">=</span> <span class="fn">DeepChromaChordRecognitionProcessor</span><span class="op">()</span>
+<span class="var">chord_labels</span> <span class="op">=</span> <span class="fn">proc</span><span class="op">(</span><span class="var">y</span><span class="op">)</span></code></pre>
+      </div>
+
+      <div class="content-note">
+        The neural processor uses GPU-accelerated CoreML inference. It's more accurate than template-based detection, especially on complex harmonic material with jazz voicings or extended chords.
+      </div>
+    </section>
+
+    <!-- 6. Export Results -->
+    <section class="content-section" id="export-results">
+      <h2>Export Results</h2>
+      <p>Save your chord analysis to JSON for downstream use &mdash; DAW integration, music information retrieval pipelines, or your personal chord sheet collection.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">json</span>
+
+<span class="kw">with</span> <span class="fn">open</span><span class="op">(</span><span class="str">"chords.json"</span><span class="op">,</span> <span class="str">"w"</span><span class="op">)</span> <span class="kw">as</span> <span class="var">f</span><span class="op">:</span>
+    <span class="var">json</span><span class="op">.</span><span class="fn">dump</span><span class="op">(</span><span class="var">chords</span><span class="op">,</span> <span class="var">f</span><span class="op">,</span> <span class="arg">indent</span><span class="op">=</span><span class="var">2</span><span class="op">)</span></code></pre>
+      </div>
+    </section>
+
+    <!-- 7. Next Steps -->
+    <section class="content-section" id="next-steps">
+      <h2>Next Steps</h2>
+      <p>You've got chord progressions. Here's what to explore next.</p>
+
+      <ul class="content-links">
+        <li>
+          <a href="beat-tracking.html">
+            <span class="arrow">&rarr;</span>
+            Beat Tracking tutorial
+          </a>
+        </li>
+        <li>
+          <a href="batch-processing.html">
+            <span class="arrow">&rarr;</span>
+            Batch Processing tutorial
+          </a>
+        </li>
+        <li>
+          <a href="../../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference
+          </a>
+        </li>
+      </ul>
+
+      <p class="content-closing">Now you know what key Mom sings in.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="../js/main.js"></script>
+</body>
+</html>

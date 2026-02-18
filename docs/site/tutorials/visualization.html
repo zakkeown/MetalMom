@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visualizing Audio Features — MetalMom</title>
+  <meta name="description" content="Spectrograms, waveforms, chromagrams, and MFCCs with MetalMom. Display and customize audio feature visualizations.">
+  <meta property="og:title" content="Visualizing Audio Features — MetalMom">
+  <meta property="og:description" content="Spectrograms, waveforms, and chromagrams. If Mom can see it, Mom can fix it.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="../index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="../getting-started.html">Getting Started</a>
+        <a href="../migration-librosa.html">Migration</a>
+        <a href="beat-tracking.html" class="active">Tutorials</a>
+        <a href="../benchmarks.html">Benchmarks</a>
+        <a href="../architecture.html">Architecture</a>
+        <a href="../../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Visualizing Audio Features</h1>
+      <p class="content-subtitle">Spectrograms, waveforms, and chromagrams. If Mom can see it, Mom can fix it.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Content
+       ============================================================ -->
+  <main class="content-page">
+
+    <!-- Section 1: Setup -->
+    <section class="content-section" id="setup">
+      <h2>Setup</h2>
+      <p>Install MetalMom with the display extra to pull in matplotlib.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label">Terminal</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">pip install metalmom[display]</span></code></pre>
+      </div>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">metalmom</span>
+<span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+<span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 2: Waveform Display -->
+    <section class="content-section" id="waveform">
+      <h2>Waveform Display</h2>
+      <p>The simplest visualization: the raw amplitude over time. Good for checking that your file loaded correctly and spotting obvious issues like clipping or silence.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="str">"song.mp3"</span><span class="op">)</span>
+
+<span class="var">fig</span><span class="op">,</span> <span class="var">ax</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">3</span><span class="op">)</span><span class="op">)</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">waveshow</span><span class="op">(</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">)</span>
+<span class="var">ax</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Waveform"</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 3: Mel Spectrogram -->
+    <section class="content-section" id="mel-spectrogram">
+      <h2>Mel Spectrogram</h2>
+      <p>The workhorse of audio analysis. Frequency content over time, warped to match human hearing. This is what most ML models see.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">S</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">melspectrogram</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">n_mels</span><span class="op">=</span><span class="var">128</span><span class="op">)</span>
+<span class="var">S_db</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">amplitude_to_db</span><span class="op">(</span><span class="var">S</span><span class="op">,</span> <span class="arg">ref</span><span class="op">=</span><span class="var">1.0</span><span class="op">)</span>
+
+<span class="var">fig</span><span class="op">,</span> <span class="var">ax</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">4</span><span class="op">)</span><span class="op">)</span>
+<span class="var">img</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">specshow</span><span class="op">(</span><span class="var">S_db</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">x_axis</span><span class="op">=</span><span class="str">'time'</span><span class="op">,</span> <span class="arg">y_axis</span><span class="op">=</span><span class="str">'mel'</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">)</span>
+<span class="var">ax</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Mel Spectrogram"</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">colorbar</span><span class="op">(</span><span class="var">img</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">,</span> <span class="arg">format</span><span class="op">=</span><span class="str">'%+2.0f dB'</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 4: Chromagram -->
+    <section class="content-section" id="chromagram">
+      <h2>Chromagram</h2>
+      <p>Pitch class energy over time. Twelve bins (C through B), perfect for visualizing harmonic content, chord changes, and key.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">chroma</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">chroma_cqt</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+
+<span class="var">fig</span><span class="op">,</span> <span class="var">ax</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">4</span><span class="op">)</span><span class="op">)</span>
+<span class="var">img</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">specshow</span><span class="op">(</span><span class="var">chroma</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">x_axis</span><span class="op">=</span><span class="str">'time'</span><span class="op">,</span> <span class="arg">y_axis</span><span class="op">=</span><span class="str">'chroma'</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">)</span>
+<span class="var">ax</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Chromagram (CQT)"</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">colorbar</span><span class="op">(</span><span class="var">img</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 5: MFCC -->
+    <section class="content-section" id="mfcc">
+      <h2>MFCCs</h2>
+      <p>Mel-frequency cepstral coefficients &mdash; a compact representation of spectral shape. Widely used for speech and music classification.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">mfcc</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">mfcc</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">n_mfcc</span><span class="op">=</span><span class="var">13</span><span class="op">)</span>
+
+<span class="var">fig</span><span class="op">,</span> <span class="var">ax</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">4</span><span class="op">)</span><span class="op">)</span>
+<span class="var">img</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">specshow</span><span class="op">(</span><span class="var">mfcc</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">x_axis</span><span class="op">=</span><span class="str">'time'</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">)</span>
+<span class="var">ax</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"MFCCs"</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">colorbar</span><span class="op">(</span><span class="var">img</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 6: Beats on Waveform -->
+    <section class="content-section" id="beats-on-waveform">
+      <h2>Beats on Waveform</h2>
+      <p>Combine features: overlay detected beat positions on the waveform. A quick sanity check that your beat tracker is finding the right spots.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">tempo</span><span class="op">,</span> <span class="var">beat_frames</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+<span class="var">beat_times</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">frames_to_time</span><span class="op">(</span><span class="var">beat_frames</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+
+<span class="var">fig</span><span class="op">,</span> <span class="var">ax</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">3</span><span class="op">)</span><span class="op">)</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">waveshow</span><span class="op">(</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">ax</span><span class="op">,</span> <span class="arg">alpha</span><span class="op">=</span><span class="var">0.6</span><span class="op">)</span>
+<span class="kw">for</span> <span class="var">bt</span> <span class="kw">in</span> <span class="var">beat_times</span><span class="op">:</span>
+    <span class="var">ax</span><span class="op">.</span><span class="fn">axvline</span><span class="op">(</span><span class="arg">x</span><span class="op">=</span><span class="var">bt</span><span class="op">,</span> <span class="arg">color</span><span class="op">=</span><span class="str">'#f59e0b'</span><span class="op">,</span> <span class="arg">alpha</span><span class="op">=</span><span class="var">0.6</span><span class="op">,</span> <span class="arg">linewidth</span><span class="op">=</span><span class="var">0.8</span><span class="op">)</span>
+<span class="var">ax</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">f"Waveform with beats (</span><span class="op">{</span><span class="var">tempo</span><span class="op">:</span><span class="str">.0f</span><span class="op">}</span><span class="str"> BPM)"</span><span class="op">)</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 7: Multi-panel Dashboard -->
+    <section class="content-section" id="multi-panel">
+      <h2>Multi-panel Dashboard</h2>
+      <p>Put it all together: four views of your audio in a single figure. Waveform, mel spectrogram, chromagram, and MFCCs, all time-aligned.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">fig</span><span class="op">,</span> <span class="var">axes</span> <span class="op">=</span> <span class="var">plt</span><span class="op">.</span><span class="fn">subplots</span><span class="op">(</span><span class="var">4</span><span class="op">,</span> <span class="var">1</span><span class="op">,</span> <span class="arg">figsize</span><span class="op">=(</span><span class="var">14</span><span class="op">,</span> <span class="var">12</span><span class="op">)</span><span class="op">,</span> <span class="arg">sharex</span><span class="op">=</span><span class="var">True</span><span class="op">)</span>
+
+<span class="cm"># Waveform</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">waveshow</span><span class="op">(</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">axes</span><span class="op">[</span><span class="var">0</span><span class="op">]</span><span class="op">,</span> <span class="arg">alpha</span><span class="op">=</span><span class="var">0.6</span><span class="op">)</span>
+<span class="var">axes</span><span class="op">[</span><span class="var">0</span><span class="op">]</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Waveform"</span><span class="op">)</span>
+
+<span class="cm"># Mel spectrogram</span>
+<span class="var">S_db</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">amplitude_to_db</span><span class="op">(</span><span class="var">metalmom</span><span class="op">.</span><span class="fn">melspectrogram</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span><span class="op">)</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">specshow</span><span class="op">(</span><span class="var">S_db</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">x_axis</span><span class="op">=</span><span class="str">'time'</span><span class="op">,</span> <span class="arg">y_axis</span><span class="op">=</span><span class="str">'mel'</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">axes</span><span class="op">[</span><span class="var">1</span><span class="op">]</span><span class="op">)</span>
+<span class="var">axes</span><span class="op">[</span><span class="var">1</span><span class="op">]</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Mel Spectrogram"</span><span class="op">)</span>
+
+<span class="cm"># Chromagram</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">specshow</span><span class="op">(</span><span class="var">metalmom</span><span class="op">.</span><span class="fn">chroma_cqt</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">x_axis</span><span class="op">=</span><span class="str">'time'</span><span class="op">,</span> <span class="arg">y_axis</span><span class="op">=</span><span class="str">'chroma'</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">axes</span><span class="op">[</span><span class="var">2</span><span class="op">]</span><span class="op">)</span>
+<span class="var">axes</span><span class="op">[</span><span class="var">2</span><span class="op">]</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"Chromagram"</span><span class="op">)</span>
+
+<span class="cm"># MFCCs</span>
+<span class="var">metalmom</span><span class="op">.</span><span class="var">display</span><span class="op">.</span><span class="fn">specshow</span><span class="op">(</span><span class="var">metalmom</span><span class="op">.</span><span class="fn">mfcc</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">,</span> <span class="arg">x_axis</span><span class="op">=</span><span class="str">'time'</span><span class="op">,</span> <span class="arg">ax</span><span class="op">=</span><span class="var">axes</span><span class="op">[</span><span class="var">3</span><span class="op">]</span><span class="op">)</span>
+<span class="var">axes</span><span class="op">[</span><span class="var">3</span><span class="op">]</span><span class="op">.</span><span class="fn">set_title</span><span class="op">(</span><span class="str">"MFCCs"</span><span class="op">)</span>
+
+<span class="var">plt</span><span class="op">.</span><span class="fn">tight_layout</span><span class="op">()</span>
+<span class="var">plt</span><span class="op">.</span><span class="fn">show</span><span class="op">()</span></code></pre>
+      </div>
+
+      <p>Four views of your audio. Mom sees everything.</p>
+    </section>
+
+    <!-- Section 8: Customization Tips -->
+    <section class="content-section" id="customization">
+      <h2>Customization Tips</h2>
+      <p>The <code>specshow</code> function accepts the same parameters as <code>librosa.display.specshow</code>. Here are the most useful ones.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Parameter</th>
+              <th>Description</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>x_axis</code></td>
+              <td>Time axis format</td>
+              <td><code>'time'</code>, <code>'frames'</code>, <code>'s'</code></td>
+            </tr>
+            <tr>
+              <td><code>y_axis</code></td>
+              <td>Frequency axis</td>
+              <td><code>'mel'</code>, <code>'hz'</code>, <code>'log'</code>, <code>'chroma'</code></td>
+            </tr>
+            <tr>
+              <td><code>cmap</code></td>
+              <td>Colormap</td>
+              <td><code>'magma'</code>, <code>'viridis'</code>, <code>'inferno'</code></td>
+            </tr>
+            <tr>
+              <td><code>vmin</code>/<code>vmax</code></td>
+              <td>Value range</td>
+              <td><code>vmin=-80, vmax=0</code> for dB</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="content-note">
+        For dB-scale spectrograms, setting <code>vmin=-80</code> and <code>vmax=0</code> gives consistent visual contrast regardless of signal level.
+      </div>
+    </section>
+
+    <!-- Section 9: Next Steps -->
+    <section class="content-section" id="next-steps">
+      <h2>Next Steps</h2>
+      <p>Now that you can see your audio, dig deeper into analysis and verification.</p>
+
+      <ul class="content-links">
+        <li>
+          <a href="parity-verification.html">
+            <span class="arrow">&rarr;</span>
+            Verifying Parity with librosa
+          </a>
+        </li>
+        <li>
+          <a href="beat-tracking.html">
+            <span class="arrow">&rarr;</span>
+            Beat Tracking a Song
+          </a>
+        </li>
+        <li>
+          <a href="../migration-librosa.html">
+            <span class="arrow">&rarr;</span>
+            Migration from librosa
+          </a>
+        </li>
+        <li>
+          <a href="../../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference
+          </a>
+        </li>
+      </ul>
+
+      <p class="content-closing">If Mom can see it, Mom can ship it.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="../js/main.js"></script>
+</body>
+</html>
