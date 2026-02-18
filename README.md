@@ -19,7 +19,18 @@ CPU-only originals.
 - **Smart dispatch** -- automatically routes to GPU or CPU based on input size
 - **CoreML neural inference** -- 67 converted madmom models running via CoreML/ANE
 - **2,295 tests** -- 1,062 Swift XCTests + 1,233 Python pytest tests with librosa parity checks
-- **2-3x faster than librosa** on 30s signals, [up to 7.6x on full pipelines](BENCHMARKS.md)
+- **2-3x faster than librosa** on 30s signals, [up to 7.6x on full pipelines](docs/site/benchmarks.html)
+
+## Documentation
+
+| | |
+|---|---|
+| **[Project Site](https://zakkeown.github.io/MetalMom/)** | Getting started, tutorials, benchmarks, architecture |
+| **[API Reference](https://metalmom.readthedocs.io/)** | Full module documentation (Sphinx/autodoc) |
+| **[librosa Migration](docs/site/migration-librosa.html)** | Side-by-side code comparisons, 120-function coverage table |
+| **[madmom Migration](docs/site/migration-madmom.html)** | Processor mapping, CoreML model details |
+| **[Tutorials](docs/site/tutorials/beat-tracking.html)** | Beat tracking, chord analysis, batch processing, visualization |
+| **[Benchmarks](docs/site/benchmarks.html)** | Performance data, pipeline profiling, optimization history |
 
 ## Installation
 
