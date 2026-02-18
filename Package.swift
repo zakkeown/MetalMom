@@ -26,6 +26,11 @@ let package = Package(
             dependencies: ["MetalMomCore"],
             path: "Sources/MetalMomBridge"
         ),
+        .executableTarget(
+            name: "ProfilingRunner",
+            dependencies: ["MetalMomCore"],
+            path: "Sources/ProfilingRunner"
+        ),
         .testTarget(
             name: "MetalMomTests",
             dependencies: ["MetalMomCore", "MetalMomBridge"],
