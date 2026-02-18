@@ -395,6 +395,67 @@ def chirp(fmin, fmax, sr=22050, length=None, duration=None, linear=True, **kwarg
         lib.mm_destroy(ctx)
 
 
+def stream(path, block_length, frame_length=2048, hop_length=512,
+           mono=True, sr=22050, fill_value=None, dtype=np.float32,
+           **kwargs):
+    """Stream audio in fixed-length blocks.
+
+    Yields consecutive blocks of audio from a file, each of length
+    ``block_length`` samples. Useful for processing large files without
+    loading them entirely into memory.
+
+    Parameters
+    ----------
+    path : str
+        Path to the audio file.
+    block_length : int
+        Number of samples per block.
+    frame_length : int
+        Frame length for overlap (not used in basic streaming). Default: 2048.
+    hop_length : int
+        Hop length for overlap (not used in basic streaming). Default: 512.
+    mono : bool
+        Convert to mono. Default: True.
+    sr : int or None
+        Target sample rate. Default: 22050.
+    fill_value : float or None
+        If not None, pad the last block with this value. If None,
+        the last block may be shorter.
+    dtype : np.dtype
+        Output dtype. Default: np.float32.
+
+    Yields
+    ------
+    np.ndarray
+        Audio blocks of shape ``(block_length,)`` (or shorter for the last block).
+    """
+    # Get total duration
+    total_duration = get_duration(path)
+    if sr is None:
+        actual_sr = get_samplerate(path)
+    else:
+        actual_sr = sr
+
+    block_duration = block_length / actual_sr
+    offset = 0.0
+
+    while offset < total_duration:
+        chunk, chunk_sr = load(path, sr=sr, mono=mono, offset=offset,
+                               duration=block_duration)
+
+        if len(chunk) == 0:
+            break
+
+        if fill_value is not None and len(chunk) < block_length:
+            padded = np.full(block_length, fill_value, dtype=dtype)
+            padded[:len(chunk)] = chunk
+            yield padded
+        else:
+            yield chunk.astype(dtype)
+
+        offset += block_duration
+
+
 def clicks(times=None, sr=22050, length=None, click_freq=1000.0,
            click_duration=0.1, **kwargs):
     """Generate a click track.

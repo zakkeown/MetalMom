@@ -157,4 +157,35 @@ final class AudioIOTests: XCTestCase {
     func testGetSampleRateNonExistent() {
         XCTAssertThrowsError(try AudioIO.getSampleRate(path: "/nonexistent.wav"))
     }
+
+    // MARK: - Chunked Loading (streaming support)
+
+    func testLoadChunked() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent("test_chunk_\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        let sampleRate = 22050
+        let numSamples = 22050 * 3  // 3 seconds
+        var samples = [Float](repeating: 0, count: numSamples)
+        for i in 0..<numSamples {
+            samples[i] = sin(Float(i) * 440.0 * 2.0 * .pi / Float(sampleRate))
+        }
+
+        try writeWAV(url: tempFile, samples: samples, sampleRate: sampleRate)
+
+        // Load in 3 chunks of 1 second each
+        let chunk1 = try AudioIO.load(path: tempFile.path, sr: nil, offset: 0.0, duration: 1.0)
+        XCTAssertEqual(Double(chunk1.count), 22050, accuracy: 1024)
+
+        let chunk2 = try AudioIO.load(path: tempFile.path, sr: nil, offset: 1.0, duration: 1.0)
+        XCTAssertEqual(Double(chunk2.count), 22050, accuracy: 1024)
+
+        let chunk3 = try AudioIO.load(path: tempFile.path, sr: nil, offset: 2.0, duration: 1.0)
+        XCTAssertEqual(Double(chunk3.count), 22050, accuracy: 1024)
+
+        // Past end of file should return empty signal
+        let chunk4 = try AudioIO.load(path: tempFile.path, sr: nil, offset: 4.0, duration: 1.0)
+        XCTAssertEqual(chunk4.count, 0)
+    }
 }
