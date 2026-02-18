@@ -29,7 +29,7 @@ public enum InferenceError: Error, Equatable, Sendable {
 ///
 /// Supports both pre-compiled `.mlmodelc` bundles and uncompiled `.mlmodel` /
 /// `.mlpackage` files (the latter are compiled on first load).
-public final class InferenceEngine {
+public final class InferenceEngine: @unchecked Sendable {
     private let model: MLModel
 
     /// The URL the model was loaded from (for diagnostics).

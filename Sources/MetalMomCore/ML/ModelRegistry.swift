@@ -28,7 +28,7 @@ public enum ModelRegistryError: Error, Equatable, Sendable {
 /// let names = registry.availableModels   // ["beat_rnn_0", "onset_cnn", ...]
 /// let engine = try registry.model(named: "beat_rnn_0")
 /// ```
-public final class ModelRegistry {
+public final class ModelRegistry: @unchecked Sendable {
     /// Shared singleton instance.
     public static let shared = ModelRegistry()
 

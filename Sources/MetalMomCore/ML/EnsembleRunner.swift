@@ -19,7 +19,7 @@ public enum EnsembleError: Error, Equatable, Sendable {
 /// madmom uses ensembles of 6-8 identical-architecture models for beat, onset,
 /// and downbeat detection. Each model produces a probability sequence, and the
 /// ensemble output is the average across all models.
-public final class EnsembleRunner {
+public final class EnsembleRunner: @unchecked Sendable {
 
     /// Strategy for combining ensemble outputs.
     public enum CombineStrategy: Sendable {
