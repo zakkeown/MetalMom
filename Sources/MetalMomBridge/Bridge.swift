@@ -122,6 +122,87 @@ public func mm_stft(
     return MM_OK
 }
 
+// MARK: - iSTFT
+
+@_cdecl("mm_istft")
+public func mm_istft(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ stftData: UnsafePointer<Float>?,
+    _ stftCount: Int64,
+    _ nFreqs: Int32,
+    _ nFrames: Int32,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ outputLength: Int64,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let stftData = stftData,
+          stftCount > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    // Build complex Signal from raw interleaved float data
+    // stftCount is the total number of raw floats (2 * nFreqs * nFrames)
+    let count = Int(stftCount)
+    let inputArray = Array(UnsafeBufferPointer(start: stftData, count: count))
+    let complexSTFT = Signal(complexData: inputArray,
+                             shape: [Int(nFreqs), Int(nFrames)],
+                             sampleRate: Int(sampleRate))
+
+    // Compute inverse STFT
+    let hop = Int(hopLength)
+    let win = Int(winLength)
+    let isCentered = center != 0
+    let reqLength: Int? = outputLength > 0 ? Int(outputLength) : nil
+
+    let result = STFT.inverse(
+        complexSTFT: complexSTFT,
+        hopLength: hop,
+        winLength: win,
+        center: isCentered,
+        length: reqLength
+    )
+
+    // Fill output MMBuffer
+    let outCount = result.count
+    guard outCount > 0 else {
+        out.pointee.data = nil
+        out.pointee.ndim = 1
+        withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+            tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+                for i in 0..<8 { shapePtr[i] = 0 }
+            }
+        }
+        out.pointee.dtype = 0
+        out.pointee.count = 0
+        return MM_OK
+    }
+
+    let outData = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
+    result.withUnsafeBufferPointer { srcBuf in
+        outData.initialize(from: srcBuf.baseAddress!, count: outCount)
+    }
+
+    out.pointee.data = outData
+    out.pointee.ndim = 1
+    withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+        tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+            for i in 0..<8 { shapePtr[i] = 0 }
+            shapePtr[0] = Int64(outCount)
+        }
+    }
+    out.pointee.dtype = 0  // float32
+    out.pointee.count = Int64(outCount)
+
+    return MM_OK
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

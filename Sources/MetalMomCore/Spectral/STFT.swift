@@ -375,3 +375,201 @@ extension STFT {
                       sampleRate: signal.sampleRate, dtype: .complex64)
     }
 }
+
+// MARK: - Inverse STFT
+
+extension STFT {
+    /// Inverse STFT: reconstruct time-domain signal from complex spectrogram via overlap-add.
+    ///
+    /// - Parameters:
+    ///   - complexSTFT: Complex spectrogram with shape [nFreqs, nFrames], dtype `.complex64`.
+    ///                  Row-major layout: for freq `k`, frame `f`, the real part is at
+    ///                  raw index `2 * (k * nFrames + f)`, imag at `2 * (k * nFrames + f) + 1`.
+    ///   - hopLength: Hop length in samples. Defaults to `(nFreqs - 1) * 2 / 4`.
+    ///   - winLength: Window length. Defaults to `nFFT`.
+    ///   - center: If `true` (default), trims `nFFT / 2` samples from each end of the output
+    ///             (undoing the padding applied by the forward STFT).
+    ///   - length: If specified, truncates or zero-pads the output to this length.
+    /// - Returns: Reconstructed 1D real-valued Signal.
+    public static func inverse(
+        complexSTFT: Signal,
+        hopLength: Int? = nil,
+        winLength: Int? = nil,
+        center: Bool = true,
+        length: Int? = nil
+    ) -> Signal {
+        precondition(complexSTFT.dtype == .complex64, "iSTFT requires complex input")
+        precondition(complexSTFT.shape.count == 2, "iSTFT requires 2D input [nFreqs, nFrames]")
+
+        let nFreqs = complexSTFT.shape[0]
+        let nFrames = complexSTFT.shape[1]
+        let nFFT = (nFreqs - 1) * 2
+        let hop = hopLength ?? nFFT / 4
+        let win = winLength ?? nFFT
+        let halfN = nFFT / 2
+
+        // Compute expected output length (length of the padded signal)
+        let expectedLength = nFFT + (nFrames - 1) * hop
+
+        // --- 1. Prepare synthesis window ---
+        let window = Windows.hann(length: win, periodic: true)
+        let fullWindow: [Float]
+        if win < nFFT {
+            let padBefore = (nFFT - win) / 2
+            let padAfter = nFFT - win - padBefore
+            fullWindow = [Float](repeating: 0, count: padBefore)
+                       + window
+                       + [Float](repeating: 0, count: padAfter)
+        } else {
+            fullWindow = window
+        }
+
+        // --- 2. Compute window normalization (sum of squared windows at each output sample) ---
+        // This is the COLA (Constant Overlap-Add) normalization factor.
+        var windowSum = [Float](repeating: 0, count: expectedLength)
+        for frame in 0..<nFrames {
+            let start = frame * hop
+            for i in 0..<nFFT {
+                windowSum[start + i] += fullWindow[i] * fullWindow[i]
+            }
+        }
+
+        // --- 3. Set up vDSP inverse FFT ---
+        let log2n = vDSP_Length(log2(Double(nFFT)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            fatalError("Failed to create FFT setup for nFFT=\(nFFT)")
+        }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
+
+        // --- 4. Allocate output and temporary buffers ---
+        var output = [Float](repeating: 0, count: expectedLength)
+        let realPart = UnsafeMutablePointer<Float>.allocate(capacity: halfN)
+        let imagPart = UnsafeMutablePointer<Float>.allocate(capacity: halfN)
+        let frameBuffer = UnsafeMutablePointer<Float>.allocate(capacity: nFFT)
+        defer {
+            realPart.deallocate()
+            imagPart.deallocate()
+            frameBuffer.deallocate()
+        }
+
+        // --- 5. Process each frame: inverse FFT + window + overlap-add ---
+        complexSTFT.withUnsafeBufferPointer { rawBuf in
+            fullWindow.withUnsafeBufferPointer { winBuf in
+                for frame in 0..<nFrames {
+                    // Extract this frame's complex bins from row-major [nFreqs, nFrames] layout.
+                    // For freq k, frame f: real at rawBuf[2 * (k * nFrames + f)],
+                    //                      imag at rawBuf[2 * (k * nFrames + f) + 1]
+
+                    // Pack into vDSP split complex format:
+                    // - realp[0] = DC real, imagp[0] = Nyquist real
+                    // - realp[k] = bin k real, imagp[k] = bin k imag, for k=1..<halfN
+
+                    // DC bin (freq 0)
+                    let dcIdx = 2 * (0 * nFrames + frame)
+                    realPart[0] = rawBuf[dcIdx]  // DC real
+
+                    // Nyquist bin (freq nFreqs-1 = halfN)
+                    let nyquistIdx = 2 * ((nFreqs - 1) * nFrames + frame)
+                    imagPart[0] = rawBuf[nyquistIdx]  // Nyquist real goes into imagp[0]
+
+                    // Bins 1..<halfN
+                    for k in 1..<halfN {
+                        let idx = 2 * (k * nFrames + frame)
+                        realPart[k] = rawBuf[idx]
+                        imagPart[k] = rawBuf[idx + 1]
+                    }
+
+                    // Scale by 2.0 to undo the 0.5 normalization from forward FFT.
+                    // The forward STFT scaled by 0.5 to normalize the vDSP factor-of-2.
+                    // The inverse FFT via vDSP_fft_zrip(kFFTDirection_Inverse) produces
+                    // values that are nFFT times the true IDFT (plus the factor-of-2 from
+                    // the packed format). So:
+                    // - Forward scaled by 0.5 to get true DFT values
+                    // - We need to multiply by 2.0 to restore the packed format values
+                    // - Then inverse FFT gives us nFFT * true signal (with factor-of-2)
+                    // - We scale by 1/(2*nFFT) after inverse to get true signal
+                    // Actually:
+                    //   Forward: vDSP produces 2*DFT, we scale by 0.5 -> DFT values
+                    //   Inverse: vDSP_fft_zrip(inverse) expects the 2*DFT format
+                    //   So we multiply by 2.0 to get back to vDSP's native format
+                    //   Then inverse gives us nFFT * signal (times 2 from packed format)
+                    //   So we divide by (2 * nFFT) afterward
+                    var scaleUp: Float = 2.0
+                    vDSP_vsmul(realPart, 1, &scaleUp, realPart, 1, vDSP_Length(halfN))
+                    vDSP_vsmul(imagPart, 1, &scaleUp, imagPart, 1, vDSP_Length(halfN))
+
+                    // Inverse FFT (in-place)
+                    var splitComplex = DSPSplitComplex(realp: realPart, imagp: imagPart)
+                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(kFFTDirection_Inverse))
+
+                    // Unpack split complex to interleaved real signal
+                    // vDSP_ztoc converts split complex back to interleaved pairs
+                    frameBuffer.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { complexPtr in
+                        vDSP_ztoc(&splitComplex, 1, complexPtr, 2, vDSP_Length(halfN))
+                    }
+
+                    // Scale by 1/(2*nFFT) to get the true inverse DFT result
+                    // vDSP_fft_zrip inverse output = 2 * nFFT * true_signal
+                    var scaleDown: Float = 1.0 / Float(2 * nFFT)
+                    vDSP_vsmul(frameBuffer, 1, &scaleDown, frameBuffer, 1, vDSP_Length(nFFT))
+
+                    // Apply synthesis window
+                    vDSP_vmul(frameBuffer, 1, winBuf.baseAddress!, 1, frameBuffer, 1, vDSP_Length(nFFT))
+
+                    // Overlap-add into output
+                    let start = frame * hop
+                    for i in 0..<nFFT {
+                        output[start + i] += frameBuffer[i]
+                    }
+                }
+            }
+        }
+
+        // --- 6. Normalize by window overlap ---
+        // Divide by the sum of squared windows (COLA normalization).
+        // Avoid division by zero for samples with no window coverage.
+        for i in 0..<expectedLength {
+            if windowSum[i] > 1e-10 {
+                output[i] /= windowSum[i]
+            }
+        }
+
+        // --- 7. Trim center padding and apply length ---
+        // When center=True, the forward STFT padded nFFT/2 on each side.
+        // We take from offset nFFT/2 in the reconstruction buffer.
+        // When length is specified, we take exactly that many samples from offset.
+        // When not specified, we trim nFFT/2 from each end.
+        var result: [Float]
+        if center {
+            let trimStart = nFFT / 2
+            if let length = length {
+                // Take `length` samples starting at trimStart from the full buffer
+                let end = min(trimStart + length, expectedLength)
+                result = Array(output[trimStart..<end])
+                // Pad with zeros if the buffer doesn't have enough samples
+                if result.count < length {
+                    result += [Float](repeating: 0, count: length - result.count)
+                }
+            } else {
+                // Default: trim nFFT/2 from each end
+                let trimEnd = expectedLength - nFFT / 2
+                if trimEnd > trimStart {
+                    result = Array(output[trimStart..<trimEnd])
+                } else {
+                    result = []
+                }
+            }
+        } else {
+            result = output
+            if let length = length {
+                if result.count > length {
+                    result = Array(result.prefix(length))
+                } else if result.count < length {
+                    result += [Float](repeating: 0, count: length - result.count)
+                }
+            }
+        }
+
+        return Signal(data: result, sampleRate: complexSTFT.sampleRate)
+    }
+}

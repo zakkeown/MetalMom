@@ -37,6 +37,12 @@ void mm_destroy(mm_context ctx);
 int32_t mm_stft(mm_context ctx, const float* signal_data, int64_t signal_length,
                 int32_t sample_rate, const MMSTFTParams* params, MMBuffer* out);
 
+/* iSTFT */
+int32_t mm_istft(mm_context ctx, const float* stft_data, int64_t stft_count,
+                 int32_t n_freqs, int32_t n_frames, int32_t sample_rate,
+                 int32_t hop_length, int32_t win_length, int32_t center,
+                 int64_t output_length, MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 
