@@ -153,11 +153,14 @@ class TestFramedSignal:
         frames = FramedSignal(sig)
         assert frames.sample_rate == 44100
 
-    def test_framed_signal_from_string(self):
-        """FramedSignal should accept a string (file path) and load via Signal."""
-        from metalmom.compat.madmom.audio.signal import FramedSignal
-        # This would require a real audio file; skip if not available
-        pytest.skip("Requires audio file for path-based test")
+    def test_framed_signal_from_array(self):
+        """FramedSignal should accept a raw numpy array wrapped in Signal."""
+        from metalmom.compat.madmom.audio.signal import Signal, FramedSignal
+        data = np.random.randn(22050).astype(np.float32)
+        sig = Signal(data, sr=22050)
+        frames = FramedSignal(sig, frame_size=1024, hop_size=512)
+        assert len(frames) > 0
+        assert frames[0].shape == (1024,)
 
 
 # ---------------------------------------------------------------------------
