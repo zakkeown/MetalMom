@@ -10,5 +10,5 @@ Usage::
     mel = librosa.feature.melspectrogram(y=y, sr=22050)
 """
 
-from .core import load, stft, istft
+from .core import load, resample, stft, istft
 from . import feature

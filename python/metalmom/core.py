@@ -58,6 +58,51 @@ def load(path, sr=22050, mono=True, offset=0.0, duration=None, **kwargs):
         lib.mm_destroy(ctx)
 
 
+def resample(y, orig_sr, target_sr, **kwargs):
+    """Resample audio from one sample rate to another.
+
+    Uses high-quality sinc interpolation with a Kaiser-windowed filter.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Audio signal (1D float32 array).
+    orig_sr : int
+        Original sample rate.
+    target_sr : int
+        Target sample rate.
+
+    Returns
+    -------
+    np.ndarray
+        Resampled audio signal (1D float32 array).
+    """
+    if orig_sr == target_sr:
+        return np.array(y, dtype=np.float32, copy=False)
+
+    y = np.ascontiguousarray(y, dtype=np.float32)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
+
+        status = lib.mm_resample(
+            ctx, signal_ptr, len(y),
+            orig_sr, target_sr,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_resample failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def db_to_amplitude(S_db, ref=1.0):
     """Convert dB-scaled values back to amplitude (magnitude).
 

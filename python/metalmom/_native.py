@@ -129,6 +129,10 @@ ffi.cdef("""
                     int32_t mono, float offset, float duration,
                     MMBuffer* out, int32_t* out_sr);
 
+    /* Resampling */
+    int32_t mm_resample(mm_context ctx, const float* signal_data, int64_t signal_length,
+                        int32_t source_sr, int32_t target_sr, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

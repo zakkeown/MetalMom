@@ -1028,6 +1028,29 @@ public func mm_load(
     }
 }
 
+// MARK: - Resampling
+
+@_cdecl("mm_resample")
+public func mm_resample(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sourceSR: Int32,
+    _ targetSR: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let signalData = signalData, signalLength > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sourceSR))
+
+    let result = Resample.resample(signal: signal, targetRate: Int(targetSR))
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
