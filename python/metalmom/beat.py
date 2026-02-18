@@ -160,3 +160,84 @@ def beat_track(y=None, sr=22050, onset_envelope=None, hop_length=512,
         return tempo, frames * hop_length
     else:
         raise ValueError(f"Unknown units: {units!r}. Must be 'frames', 'time', or 'samples'.")
+
+
+def neural_beat_track(activations, fps=100.0, min_bpm=55.0, max_bpm=215.0,
+                      transition_lambda=100.0, threshold=0.05, trim=True,
+                      units='frames', hop_length=441, sr=44100, **kwargs):
+    """Decode beat positions from pre-computed neural activation probabilities.
+
+    Uses dynamic programming to find the optimal beat sequence given
+    activation probabilities (e.g., from an RNN ensemble as in madmom's
+    DBNBeatTrackingProcessor).
+
+    Parameters
+    ----------
+    activations : np.ndarray
+        Beat activation probabilities, shape ``(n_frames,)``, values in [0, 1].
+    fps : float
+        Frames per second of the activation signal. Default: 100.0.
+    min_bpm : float
+        Minimum tempo in BPM. Default: 55.0.
+    max_bpm : float
+        Maximum tempo in BPM. Default: 215.0.
+    transition_lambda : float
+        Penalty for tempo deviations. Higher = smoother. Default: 100.0.
+    threshold : float
+        Minimum activation to consider as a beat. Default: 0.05.
+    trim : bool
+        Trim first and last beats. Default: True.
+    units : str
+        ``'frames'`` (default) returns frame indices;
+        ``'time'`` returns beat times in seconds;
+        ``'samples'`` returns sample indices.
+    hop_length : int
+        Hop length (used for time/sample conversion). Default: 441.
+    sr : int
+        Sample rate (used for time/sample conversion). Default: 44100.
+
+    Returns
+    -------
+    tempo : float
+        Estimated tempo in BPM.
+    beats : np.ndarray
+        Beat locations as frame indices, times, or sample indices.
+    """
+    activations = np.ascontiguousarray(activations, dtype=np.float32)
+    n_frames = len(activations)
+    if n_frames == 0:
+        return 0.0, np.array([], dtype=int)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out_tempo = ffi.new("float*")
+        out_beats = ffi.new("MMBuffer*")
+        act_ptr = ffi.cast("const float*", activations.ctypes.data)
+
+        status = lib.mm_neural_beat_decode(
+            ctx, act_ptr, n_frames,
+            float(fps), float(min_bpm), float(max_bpm),
+            float(transition_lambda), float(threshold),
+            1 if trim else 0,
+            out_tempo, out_beats,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_neural_beat_decode failed with status {status}")
+
+        tempo = float(out_tempo[0])
+        result = buffer_to_numpy(out_beats)
+        frames = result.ravel().astype(int)
+    finally:
+        lib.mm_destroy(ctx)
+
+    if units == 'frames':
+        return tempo, frames
+    elif units == 'time':
+        return tempo, frames.astype(np.float64) / fps
+    elif units == 'samples':
+        return tempo, frames * hop_length
+    else:
+        raise ValueError(f"Unknown units: {units!r}. Must be 'frames', 'time', or 'samples'.")

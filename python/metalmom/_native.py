@@ -300,6 +300,14 @@ ffi.cdef("""
     int32_t mm_deemphasis(mm_context ctx, const float* signal_data, int64_t signal_length,
                           int32_t sample_rate, float coef, MMBuffer* out);
 
+    /* Neural Beat Decode */
+    int32_t mm_neural_beat_decode(mm_context ctx,
+                                  const float* activations, int32_t n_frames,
+                                  float fps, float min_bpm, float max_bpm,
+                                  float transition_lambda, float threshold,
+                                  int32_t trim,
+                                  float* out_tempo, MMBuffer* out_beats);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

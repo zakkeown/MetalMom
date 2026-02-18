@@ -2185,6 +2185,49 @@ public func mm_deemphasis(
     return fillBuffer(result, out)
 }
 
+// MARK: - Neural Beat Decode
+
+@_cdecl("mm_neural_beat_decode")
+public func mm_neural_beat_decode(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ activations: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ fps: Float,
+    _ minBPM: Float,
+    _ maxBPM: Float,
+    _ transitionLambda: Float,
+    _ threshold: Float,
+    _ trim: Int32,
+    _ outTempo: UnsafeMutablePointer<Float>?,
+    _ outBeats: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let activations = activations,
+          nFrames > 0,
+          let outTempo = outTempo,
+          let outBeats = outBeats else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let actArray = Array(UnsafeBufferPointer(start: activations, count: Int(nFrames)))
+
+    let (tempo, beats) = NeuralBeatTracker.decode(
+        activations: actArray,
+        fps: fps,
+        minBPM: minBPM,
+        maxBPM: maxBPM,
+        transitionLambda: transitionLambda,
+        threshold: threshold,
+        trim: trim != 0
+    )
+
+    outTempo.pointee = tempo
+
+    let floatBeats = beats.map { Float($0) }
+    let result = Signal(data: floatBeats.isEmpty ? [] : floatBeats,
+                        shape: [floatBeats.count], sampleRate: 0)
+    return fillBuffer(result, outBeats)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
