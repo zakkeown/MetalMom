@@ -40,7 +40,16 @@ autodoc_typehints = "description"
 autosummary_generate = True
 
 # Mock native imports that require the dylib (not available on ReadTheDocs)
-autodoc_mock_imports = ["cffi", "metalmom._native", "metalmom._buffer"]
+# Also mock optional dependencies that may not be installed in the RTD env.
+autodoc_mock_imports = [
+    "cffi",
+    "metalmom._native",
+    "metalmom._buffer",
+    "soundfile",
+    "matplotlib",
+    "matplotlib.pyplot",
+    "mir_eval",
+]
 
 # Napoleon settings (NumPy-style docstrings)
 napoleon_google_docstring = False

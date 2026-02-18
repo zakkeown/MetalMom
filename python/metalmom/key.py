@@ -34,7 +34,8 @@ def key_detect(activations, sr=22050):
     Returns
     -------
     dict
-        Dictionary with:
+        Dictionary with the following keys:
+
         - ``'key_index'`` : int -- Detected key index (0-23).
         - ``'key_label'`` : str -- Key label (e.g. ``'C major'``).
         - ``'is_major'`` : bool -- Whether the detected key is major.
