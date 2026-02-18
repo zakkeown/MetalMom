@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started — MetalMom</title>
+  <meta name="description" content="Get started with MetalMom — GPU-accelerated audio analysis for Python on Apple Silicon. Installation, first analysis, and GPU acceleration guide.">
+  <meta property="og:title" content="Getting Started — MetalMom">
+  <meta property="og:description" content="Get started with MetalMom. Installation, first analysis, and GPU acceleration guide.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="getting-started.html" class="active">Getting Started</a>
+        <a href="migration-librosa.html">Migration</a>
+        <a href="tutorials/beat-tracking.html">Tutorials</a>
+        <a href="benchmarks.html">Benchmarks</a>
+        <a href="architecture.html">Architecture</a>
+        <a href="../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero (smaller than homepage)
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Getting Started</h1>
+      <p class="content-subtitle">Mom's getting you set up. It'll only take a minute.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Content
+       ============================================================ -->
+  <main class="content-page">
+
+    <!-- Requirements -->
+    <section class="content-section" id="requirements">
+      <h2>Requirements</h2>
+      <ul class="content-requirements">
+        <li>macOS 13 (Ventura) or later</li>
+        <li>Apple Silicon (M1, M2, M3, M4) or Intel Mac with compatible GPU</li>
+        <li>Python 3.11 or later</li>
+      </ul>
+      <div class="content-note">
+        MetalMom is macOS-only. That's where the Metal is.
+      </div>
+    </section>
+
+    <!-- Installation -->
+    <section class="content-section" id="installation">
+      <h2>Installation</h2>
+      <p>One line. Mom keeps it simple.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label">Terminal</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="var">pip install metalmom</span></code></pre>
+      </div>
+
+      <h3>Optional extras</h3>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label">Terminal</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="cm"># Visualization support</span>
+<span class="var">pip install metalmom[display]</span>    <span class="cm"># + matplotlib</span>
+
+<span class="cm"># Evaluation metrics</span>
+<span class="var">pip install metalmom[eval]</span>       <span class="cm"># + mir_eval</span>
+
+<span class="cm"># Development (testing + librosa parity)</span>
+<span class="var">pip install metalmom[dev]</span>        <span class="cm"># + pytest, librosa</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Your First Analysis -->
+    <section class="content-section" id="first-analysis">
+      <h2>Your First Analysis</h2>
+      <p>Load a file, compute a spectrogram, detect some beats. The whole pipeline in ten lines.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">Python</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="var">metalmom</span>
+
+<span class="cm"># Load an audio file</span>
+<span class="var">y</span><span class="op">,</span> <span class="var">sr</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">load</span><span class="op">(</span><span class="str">"song.mp3"</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Loaded </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">y</span><span class="op">)</span><span class="op">/</span><span class="var">sr</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str"> seconds at </span><span class="op">{</span><span class="var">sr</span><span class="op">}</span><span class="str"> Hz"</span><span class="op">)</span>
+
+<span class="cm"># Compute a mel spectrogram</span>
+<span class="var">S</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">melspectrogram</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+<span class="var">S_db</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">amplitude_to_db</span><span class="op">(</span><span class="var">S</span><span class="op">,</span> <span class="arg">ref</span><span class="op">=</span><span class="var">1.0</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Spectrogram shape: </span><span class="op">{</span><span class="var">S_db</span><span class="op">.</span><span class="var">shape</span><span class="op">}</span><span class="str">"</span><span class="op">)</span>
+
+<span class="cm"># Detect beats</span>
+<span class="var">tempo</span><span class="op">,</span> <span class="var">beat_frames</span> <span class="op">=</span> <span class="var">metalmom</span><span class="op">.</span><span class="fn">beat_track</span><span class="op">(</span><span class="arg">y</span><span class="op">=</span><span class="var">y</span><span class="op">,</span> <span class="arg">sr</span><span class="op">=</span><span class="var">sr</span><span class="op">)</span>
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Tempo: </span><span class="op">{</span><span class="var">tempo</span><span class="op">:</span><span class="str">.1f</span><span class="op">}</span><span class="str"> BPM, </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">beat_frames</span><span class="op">)</span><span class="op">}</span><span class="str"> beats detected"</span><span class="op">)</span></code></pre>
+      </div>
+
+      <p>That's it. If you're coming from librosa, you'll notice the API is identical. Mom raised it that way.</p>
+    </section>
+
+    <!-- GPU Acceleration -->
+    <section class="content-section" id="gpu-acceleration">
+      <h2>GPU Acceleration</h2>
+      <p>MetalMom's Smart Dispatch automatically routes operations to the fastest backend. No configuration needed &mdash; Mom handles it.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>Backend</th>
+              <th>Threshold</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>STFT</td>
+              <td><span class="backend-metal">Metal</span></td>
+              <td><code>&gt; 8192 samples</code></td>
+            </tr>
+            <tr>
+              <td>Element-wise ops</td>
+              <td><span class="backend-metal">Metal</span></td>
+              <td><code>&gt; 65536 elements</code></td>
+            </tr>
+            <tr>
+              <td>Matrix multiply</td>
+              <td><span class="backend-metal">Metal</span></td>
+              <td><code>&gt; 512&times;512</code></td>
+            </tr>
+            <tr>
+              <td>Reductions</td>
+              <td><span class="backend-metal">Metal</span></td>
+              <td><code>&gt; 131072 elements</code></td>
+            </tr>
+            <tr>
+              <td>Convolution</td>
+              <td><span class="backend-metal">Metal</span></td>
+              <td><code>&gt; 32768 elements</code></td>
+            </tr>
+            <tr>
+              <td>MFCC pipeline</td>
+              <td><span class="backend-metal">Metal (fused)</span></td>
+              <td><code>&gt; 8192 samples</code></td>
+            </tr>
+            <tr>
+              <td>Everything else</td>
+              <td><span class="backend-accelerate">Accelerate/vDSP</span></td>
+              <td>Always</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Below these thresholds, Accelerate is actually faster due to Metal dispatch overhead. Mom knows the crossover points.</p>
+    </section>
+
+    <!-- Next Steps -->
+    <section class="content-section" id="next-steps">
+      <h2>Next Steps</h2>
+      <p>You're installed, you've run your first analysis. Here's where to go from here.</p>
+
+      <ul class="content-links">
+        <li>
+          <a href="migration-librosa.html">
+            <span class="arrow">&rarr;</span>
+            Migration from librosa
+          </a>
+        </li>
+        <li>
+          <a href="migration-madmom.html">
+            <span class="arrow">&rarr;</span>
+            Migration from madmom
+          </a>
+        </li>
+        <li>
+          <a href="tutorials/beat-tracking.html">
+            <span class="arrow">&rarr;</span>
+            Beat Tracking tutorial
+          </a>
+        </li>
+        <li>
+          <a href="../api/index.html">
+            <span class="arrow">&rarr;</span>
+            API Reference
+          </a>
+        </li>
+      </ul>
+
+      <p class="content-closing">Go make some noise.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coming from madmom? — MetalMom Migration Guide</title>
+  <meta name="description" content="Migrate from madmom to MetalMom. Same processors, same pipeline, new GPU-accelerated engine under the hood.">
+  <meta property="og:title" content="Coming from madmom? — MetalMom">
+  <meta property="og:description" content="Same processors. Same pipeline. New engine under the hood.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       Navigation
+       ============================================================ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <a href="index.html" class="nav-logo">MetalMom</a>
+
+      <button class="nav-hamburger" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="nav-links">
+        <a href="getting-started.html">Getting Started</a>
+        <a href="migration-librosa.html">Migration</a>
+        <a href="tutorials/beat-tracking.html">Tutorials</a>
+        <a href="benchmarks.html">Benchmarks</a>
+        <a href="architecture.html">Architecture</a>
+        <a href="../api/index.html" class="external">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom" class="external" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       Hero
+       ============================================================ -->
+  <section class="content-hero">
+    <div class="content-hero-inner">
+      <h1>Coming from madmom?</h1>
+      <p class="content-subtitle">Same processors. Same pipeline. New engine under the hood.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       Main Content
+       ============================================================ -->
+  <main class="content-page">
+
+    <!-- Section 1: The Quick Switch -->
+    <section class="content-section">
+      <h2>The Quick Switch</h2>
+
+      <div class="code-grid">
+        <!-- madmom -->
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-label">madmom</span>
+            <button class="code-block-copy" aria-label="Copy code">Copy</button>
+          </div>
+          <pre><code><span class="kw">from</span> <span class="var">madmom.features.beats</span> <span class="kw">import</span> <span class="var">RNNBeatProcessor</span><span class="op">,</span> <span class="var">DBNBeatTrackingProcessor</span>
+
+<span class="var">proc</span> <span class="op">=</span> <span class="fn">RNNBeatProcessor</span><span class="op">()</span>
+<span class="var">tracker</span> <span class="op">=</span> <span class="fn">DBNBeatTrackingProcessor</span><span class="op">(</span><span class="arg">fps</span><span class="op">=</span><span class="var">100</span><span class="op">)</span>
+<span class="var">beats</span> <span class="op">=</span> <span class="var">tracker</span><span class="op">(</span><span class="var">proc</span><span class="op">(</span><span class="str">"song.wav"</span><span class="op">))</span></code></pre>
+        </div>
+
+        <!-- MetalMom -->
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-label accent">MetalMom</span>
+            <button class="code-block-copy" aria-label="Copy code">Copy</button>
+          </div>
+          <pre><code><span class="kw">from</span> <span class="var">metalmom.compat.madmom.features.beats</span> <span class="kw">import</span> <span class="var">RNNBeatProcessor</span><span class="op">,</span> <span class="var">DBNBeatTrackingProcessor</span>
+
+<span class="var">proc</span> <span class="op">=</span> <span class="fn">RNNBeatProcessor</span><span class="op">()</span>
+<span class="var">tracker</span> <span class="op">=</span> <span class="fn">DBNBeatTrackingProcessor</span><span class="op">(</span><span class="arg">fps</span><span class="op">=</span><span class="var">100</span><span class="op">)</span>
+<span class="var">beats</span> <span class="op">=</span> <span class="var">tracker</span><span class="op">(</span><span class="var">proc</span><span class="op">(</span><span class="str">"song.wav"</span><span class="op">))</span></code></pre>
+        </div>
+      </div>
+
+      <p>Same import path (just add <code>metalmom.compat.</code> in front). Same processor API. Mom learned all the moves.</p>
+    </section>
+
+    <!-- Section 2: Processor Mapping -->
+    <section class="content-section">
+      <h2>Processor Mapping</h2>
+      <p>Every madmom processor has a MetalMom equivalent with an identical API. Here's the full map.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>madmom Class</th>
+              <th>MetalMom Path</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>madmom.features.beats.RNNBeatProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.beats.RNNBeatProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.beats.DBNBeatTrackingProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.beats.DBNBeatTrackingProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.onsets.RNNOnsetProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.onsets.RNNOnsetProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.onsets.OnsetPeakPickingProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.onsets.OnsetPeakPickingProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.tempo.TempoEstimationProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.tempo.TempoEstimationProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.downbeats.RNNDownBeatProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.downbeats.RNNDownBeatProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.downbeats.DBNDownBeatTrackingProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.downbeats.DBNDownBeatTrackingProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.key.CNNKeyRecognitionProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.key.CNNKeyRecognitionProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.chords.DeepChromaChordRecognitionProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.chords.DeepChromaChordRecognitionProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.notes.RNNPianoNoteProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.notes.RNNPianoNoteProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.features.notes.NotePeakPickingProcessor</code></td>
+              <td><code>metalmom.compat.madmom.features.notes.NotePeakPickingProcessor</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.audio.signal.Signal</code></td>
+              <td><code>metalmom.compat.madmom.audio.signal.Signal</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.audio.stft.STFT</code></td>
+              <td><code>metalmom.compat.madmom.audio.stft.STFT</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.audio.spectrogram.Spectrogram</code></td>
+              <td><code>metalmom.compat.madmom.audio.spectrogram.Spectrogram</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.evaluation.beats.BeatEvaluation</code></td>
+              <td><code>metalmom.compat.madmom.evaluation.beats.BeatEvaluation</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+            <tr>
+              <td><code>madmom.evaluation.onsets.OnsetEvaluation</code></td>
+              <td><code>metalmom.compat.madmom.evaluation.onsets.OnsetEvaluation</code></td>
+              <td><span class="backend-metal">Full</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 3: Key Differences -->
+    <section class="content-section">
+      <h2>Key Differences</h2>
+      <p>Mom upgraded the engine. Here's what changed.</p>
+
+      <div class="content-table-wrapper">
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th>madmom</th>
+              <th>MetalMom</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ML Backend</td>
+              <td>PyTorch (CPU)</td>
+              <td>CoreML (GPU/ANE)</td>
+            </tr>
+            <tr>
+              <td>Model Format</td>
+              <td><code>.pkl</code> pickle files</td>
+              <td><code>.mlmodel</code> / <code>.mlpackage</code></td>
+            </tr>
+            <tr>
+              <td>Platform</td>
+              <td>Linux, macOS, Windows</td>
+              <td>macOS only</td>
+            </tr>
+            <tr>
+              <td>Python</td>
+              <td>3.6&ndash;3.11 (broken on 3.12+)</td>
+              <td>3.11+</td>
+            </tr>
+            <tr>
+              <td>Training</td>
+              <td>Supported</td>
+              <td>Inference only</td>
+            </tr>
+            <tr>
+              <td>Model Count</td>
+              <td>67 pretrained models</td>
+              <td>Same 67, converted to CoreML</td>
+            </tr>
+            <tr>
+              <td>Install</td>
+              <td><code>pip install madmom</code> (often fails)</td>
+              <td><code>pip install metalmom</code> (just works)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>madmom is a fantastic library, but it has installation issues on modern Python (<code>collections.MutableSequence</code> was removed in 3.12). Mom just works.</p>
+    </section>
+
+    <!-- Section 4: Complete Beat Tracking Pipeline -->
+    <section class="content-section">
+      <h2>Complete Beat Tracking Pipeline</h2>
+      <p>A realistic end-to-end pipeline showing how everything fits together.</p>
+
+      <div class="content-code-block code-block">
+        <div class="code-block-header">
+          <span class="code-block-label accent">MetalMom &mdash; Beat Tracking</span>
+          <button class="code-block-copy" aria-label="Copy code">Copy</button>
+        </div>
+        <pre><code><span class="kw">from</span> <span class="var">metalmom.compat.madmom.features.beats</span> <span class="kw">import</span> <span class="op">(</span>
+    <span class="var">RNNBeatProcessor</span><span class="op">,</span>
+    <span class="var">DBNBeatTrackingProcessor</span><span class="op">,</span>
+<span class="op">)</span>
+
+<span class="cm"># Step 1: Compute beat activations with RNN ensemble</span>
+<span class="var">proc</span> <span class="op">=</span> <span class="fn">RNNBeatProcessor</span><span class="op">()</span>
+<span class="var">activations</span> <span class="op">=</span> <span class="var">proc</span><span class="op">(</span><span class="str">"song.wav"</span><span class="op">)</span>
+
+<span class="cm"># Step 2: Track beats with Dynamic Bayesian Network</span>
+<span class="var">tracker</span> <span class="op">=</span> <span class="fn">DBNBeatTrackingProcessor</span><span class="op">(</span>
+    <span class="arg">min_bpm</span><span class="op">=</span><span class="var">55</span><span class="op">,</span>
+    <span class="arg">max_bpm</span><span class="op">=</span><span class="var">215</span><span class="op">,</span>
+    <span class="arg">fps</span><span class="op">=</span><span class="var">100</span><span class="op">,</span>
+    <span class="arg">transition_lambda</span><span class="op">=</span><span class="var">100</span><span class="op">,</span>
+<span class="op">)</span>
+<span class="var">beats</span> <span class="op">=</span> <span class="var">tracker</span><span class="op">(</span><span class="var">activations</span><span class="op">)</span>
+
+<span class="fn">print</span><span class="op">(</span><span class="str">f"Found </span><span class="op">{</span><span class="fn">len</span><span class="op">(</span><span class="var">beats</span><span class="op">)</span><span class="op">}</span><span class="str"> beats"</span><span class="op">)</span>
+<span class="kw">for</span> <span class="var">beat_time</span> <span class="kw">in</span> <span class="var">beats</span><span class="op">[:</span><span class="var">10</span><span class="op">]:</span>
+    <span class="fn">print</span><span class="op">(</span><span class="str">f"  Beat at </span><span class="op">{</span><span class="var">beat_time</span><span class="op">:</span><span class="str">.3f</span><span class="op">}</span><span class="str">s"</span><span class="op">)</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 5: Model Conversion Details -->
+    <section class="content-section">
+      <h2>Model Conversion Details</h2>
+      <p>67 pretrained madmom models were converted to CoreML using Apple's NeuralNetworkBuilder.</p>
+
+      <ul class="content-requirements">
+        <li>Models extracted from madmom's pickle files using a SafeUnpickler (no madmom import required)</li>
+        <li>Peephole LSTM layers preserved (NeuralNetworkBuilder, not PyTorch export)</li>
+        <li>Rank-5 tensor shapes handled for CoreML's internal format</li>
+        <li>All 9 model families: beats (8 models), onsets (6), downbeats (8), tempo (6), key (1), chords (1), notes (4), spectral onsets (6), pattern tracking (27)</li>
+      </ul>
+
+      <div class="content-note">
+        <strong>License:</strong> Model weights are licensed under CC-BY-NC-SA 4.0 (same as original madmom). Source code is MIT.
+      </div>
+
+      <p>Mom did the heavy lifting so you don't have to wrestle with pickle files.</p>
+    </section>
+
+    <!-- Section 6: What's Not Supported -->
+    <section class="content-section">
+      <h2>What's Not Supported</h2>
+      <p>Honesty is the best policy. Here's what MetalMom doesn't do.</p>
+
+      <div class="content-note">
+        <p style="margin: 0 0 0.5rem; color: var(--text-secondary); line-height: 1.75;">No model training &mdash; inference only</p>
+        <p style="margin: 0 0 0.5rem; color: var(--text-secondary); line-height: 1.75;">No custom model loading (use the 67 pre-converted models)</p>
+        <p style="margin: 0 0 0.5rem; color: var(--text-secondary); line-height: 1.75;">Linux/Windows not supported (CoreML is macOS-only)</p>
+        <p style="margin: 0; color: var(--text-secondary); line-height: 1.75;">Some advanced madmom utilities (Processor chains, parallel processing) are simplified</p>
+      </div>
+
+      <p>If you need to train new models, use the original madmom. For everything else, Mom's got you.</p>
+
+      <!-- Next Steps -->
+      <h3>Next Steps</h3>
+      <ul class="content-links">
+        <li><a href="getting-started.html"><span class="arrow">&rarr;</span> Getting Started &mdash; install and run your first analysis</a></li>
+        <li><a href="migration-librosa.html"><span class="arrow">&rarr;</span> Coming from librosa? &mdash; migration guide for librosa users</a></li>
+        <li><a href="tutorials/beat-tracking.html"><span class="arrow">&rarr;</span> Beat Tracking Tutorial &mdash; end-to-end walkthrough</a></li>
+        <li><a href="benchmarks.html"><span class="arrow">&rarr;</span> Benchmarks &mdash; see the performance numbers</a></li>
+      </ul>
+
+      <p class="content-closing">Forged in Metal. Raised by Mom.</p>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       Footer
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zakkeown/MetalMom" target="_blank" rel="noopener">GitHub</a>
+        <a href="../api/index.html">API Reference</a>
+        <a href="https://github.com/zakkeown/MetalMom/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      </div>
+      <div class="footer-meta">
+        <p class="footer-tagline">Forged in Metal. Raised by Mom.</p>
+        <p class="footer-copyright">&copy; 2026 MetalMom contributors</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/main.js"></script>
+</body>
+</html>
