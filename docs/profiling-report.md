@@ -67,4 +67,55 @@ Each call recomputes a full mel spectrogram from scratch. When beat tracking cal
 
 ## Optimization Results
 
-_(to be filled after fixes)_
+### Fix #1: AudioIO.load() — AVAudioConverter (commit `d631e14`)
+
+Replaced manual per-sample linear interpolation resampling + manual mono downmix with a single `AVAudioConverter` pass. AVAudioConverter performs hardware-accelerated sample rate conversion and channel downmix in one operation.
+
+**Changes:** `Sources/MetalMomCore/Audio/AudioIO.swift` — deleted `resample()` method entirely, replaced with `AVAudioConverter`-based path.
+
+### Fix #2: BeatTracker autocorrelation — FFT-based O(n log n) (commit `c627b4d`)
+
+Replaced O(n^2) direct autocorrelation with FFT-based implementation using `vDSP_fft_zrip`. The autocorrelation is computed as IFFT(|FFT(x)|^2), reducing complexity from O(n^2) to O(n log n).
+
+**Changes:** `Sources/MetalMomCore/Rhythm/BeatTracker.swift` — rewrote `autocorrelation()` using vDSP FFT routines with proper handling of packed DC/Nyquist format.
+
+### Fix #3: BeatTracker DP — Precomputed log table (commit `c627b4d`)
+
+Added a precomputed log lookup table in `dpBeatTrack()` to eliminate ~635K per-iteration `log()` transcendental function calls in the DP inner loop.
+
+**Changes:** `Sources/MetalMomCore/Rhythm/BeatTracker.swift` — precompute `logTable[i] = -log(Float(i))` before DP loop.
+
+### Before vs After (Release Build)
+
+**Full song** (`inamorata.m4a`, ~11 min):
+
+| Step | Before (ms) | After (ms) | Speedup |
+|------|------------:|----------:|--------:|
+| Load (AudioIO) | 8,502 | 637 | 13.3x |
+| STFT | 107 | 139 | 0.8x |
+| Mel spectrogram | 189 | 136 | 1.4x |
+| MFCC (FusedMFCC) | 180 | 63 | 2.9x |
+| Chroma | 98 | 81 | 1.2x |
+| Onset strength | 440 | 142 | 3.1x |
+| Beat tracking | 580 | 136 | 4.3x |
+| **Total** | **10,096** | **1,333** | **7.6x** |
+
+**30s excerpt** (`moth_30s.m4a`):
+
+| Step | Before (ms) | After (ms) | Speedup |
+|------|------------:|----------:|--------:|
+| Load | 2,084 | 49 | 42.5x |
+| STFT | 136 | 51 | 2.7x |
+| Mel | 73 | 8 | 9.1x |
+| MFCC | 304 | 16 | 19.0x |
+| Chroma | 19 | 11 | 1.7x |
+| Onset | 43 | 8 | 5.4x |
+| Beat | 48 | 13 | 3.7x |
+| **Total** | **2,706** | **156** | **17.3x** |
+
+### Summary
+
+- **AudioIO.load()** was the dominant bottleneck at 84% of total time. AVAudioConverter eliminated the manual resampling loop for a 13-42x speedup depending on file length.
+- **BeatTracker** benefited from both FFT-based autocorrelation (O(n^2) → O(n log n)) and precomputed log tables, yielding 4.3x speedup on long files.
+- **Overall pipeline**: 7.6x faster on full songs, 17.3x faster on short excerpts.
+- The pipeline is now compute-bound rather than I/O-bound. Load is 48% of total time (down from 84%), with the remaining time distributed across spectral/rhythm operations.
