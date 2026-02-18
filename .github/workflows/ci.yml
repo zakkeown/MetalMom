@@ -42,7 +42,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install Python dependencies
-        run: pip install numpy cffi soundfile pytest librosa mir_eval matplotlib
+        run: pip install numpy cffi soundfile pytest librosa mir_eval matplotlib && pip install -e .
 
       - name: Run Python tests
         run: pytest Tests/ -v --tb=short
@@ -57,9 +57,6 @@ jobs:
 
       - name: Select Xcode 16
         run: sudo xcode-select -s /Applications/Xcode_16.app
-
-      - name: Install iOS Simulator runtime
-        run: xcodebuild -downloadPlatform iOS
 
       - name: Build for iOS Simulator
         run: |
