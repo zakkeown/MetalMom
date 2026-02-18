@@ -2327,6 +2327,43 @@ public func mm_downbeat_detect(
     return fillBuffer(downbeatsSignal, outDownbeats)
 }
 
+// MARK: - Key Detection
+
+@_cdecl("mm_key_detect")
+public func mm_key_detect(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ activations: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ outKeyIndex: UnsafeMutablePointer<Int32>?,
+    _ outConfidence: UnsafeMutablePointer<Float>?,
+    _ outProbabilities: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let activations = activations,
+          nFrames > 0,
+          let outKeyIndex = outKeyIndex,
+          let outConfidence = outConfidence,
+          let outProbabilities = outProbabilities else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let totalCount = Int(nFrames) * 24
+    let actArray = Array(UnsafeBufferPointer(start: activations, count: totalCount))
+
+    let result: KeyDetection.KeyResult
+    if nFrames == 1 {
+        result = KeyDetection.detect(activations: actArray)
+    } else {
+        result = KeyDetection.detectFromSequence(activations: actArray, nFrames: Int(nFrames))
+    }
+
+    outKeyIndex.pointee = Int32(result.keyIndex)
+    outConfidence.pointee = result.confidence
+
+    // Fill probabilities buffer (24 floats)
+    let probSignal = Signal(data: result.probabilities, shape: [24], sampleRate: 0)
+    return fillBuffer(probSignal, outProbabilities)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

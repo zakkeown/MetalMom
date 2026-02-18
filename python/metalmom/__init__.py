@@ -16,3 +16,4 @@ from .onset import onset_strength, onset_detect
 from .beat import beat_track, plp
 from .pitch import yin, pyin, piptrack, estimate_tuning
 from .effects import hpss, harmonic, percussive, time_stretch, pitch_shift, trim, split, preemphasis, deemphasis
+from .key import key_detect
