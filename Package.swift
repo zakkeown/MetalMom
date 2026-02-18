@@ -28,7 +28,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MetalMomTests",
-            dependencies: ["MetalMomCore"],
+            dependencies: ["MetalMomCore", "MetalMomBridge"],
             path: "Tests/MetalMomTests"
         ),
     ]

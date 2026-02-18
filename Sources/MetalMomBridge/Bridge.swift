@@ -13,17 +13,29 @@ final class MMContextInternal {
     }
 }
 
+/// Thread-safe registry of live context pointers to prevent double-free.
+private let contextRegistryLock = NSLock()
+private var contextRegistry = Set<UnsafeMutableRawPointer>()
+
 // MARK: - Lifecycle
 
 @_cdecl("mm_init")
 public func mm_init() -> UnsafeMutableRawPointer? {
     let ctx = MMContextInternal()
-    return Unmanaged.passRetained(ctx).toOpaque()
+    let ptr = Unmanaged.passRetained(ctx).toOpaque()
+    contextRegistryLock.lock()
+    contextRegistry.insert(ptr)
+    contextRegistryLock.unlock()
+    return ptr
 }
 
 @_cdecl("mm_destroy")
 public func mm_destroy(_ ctx: UnsafeMutableRawPointer?) {
     guard let ctx = ctx else { return }
+    contextRegistryLock.lock()
+    let wasRegistered = contextRegistry.remove(ctx) != nil
+    contextRegistryLock.unlock()
+    guard wasRegistered else { return }  // Already destroyed — no-op
     Unmanaged<MMContextInternal>.fromOpaque(ctx).release()
 }
 
@@ -49,13 +61,18 @@ public func mm_stft(
     let context = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
     let p = params.pointee
 
+    // Validate STFT parameters
+    let nFFT = Int(p.n_fft)
+    guard nFFT > 0, nFFT & (nFFT - 1) == 0 else {
+        return MM_ERR_INVALID_INPUT  // nFFT must be a positive power of 2
+    }
+
     // Copy input data into a Signal
     let length = Int(signalLength)
     let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
     let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
 
     // Build STFT input
-    let nFFT = Int(p.n_fft)
     let hopLength = Int(p.hop_length)
     let winLength = Int(p.win_length)
     let center = p.center != 0

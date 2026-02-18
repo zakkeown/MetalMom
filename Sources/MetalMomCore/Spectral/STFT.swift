@@ -28,6 +28,34 @@ public struct STFTOutput {
     public let magnitude: Signal
 }
 
+// MARK: - Helpers
+
+/// Returns true if `n` is a power of two (and positive).
+@inline(__always)
+private func isPowerOfTwo(_ n: Int) -> Bool {
+    n > 0 && (n & (n - 1)) == 0
+}
+
+/// Prepare a full-length window of exactly `nFFT` samples.
+///
+/// - If `winLength < nFFT`: zero-pad the window symmetrically to nFFT.
+/// - If `winLength == nFFT`: use the window as-is.
+/// - If `winLength > nFFT`: truncate the window to the center nFFT samples.
+private func prepareWindow(winLength: Int, nFFT: Int) -> [Float] {
+    let window = Windows.hann(length: winLength, periodic: true)
+    if winLength < nFFT {
+        let padBefore = (nFFT - winLength) / 2
+        let padAfter = nFFT - winLength - padBefore
+        return [Float](repeating: 0, count: padBefore) + window + [Float](repeating: 0, count: padAfter)
+    } else if winLength > nFFT {
+        // Truncate: take the center nFFT samples of the window
+        let start = (winLength - nFFT) / 2
+        return Array(window[start..<(start + nFFT)])
+    } else {
+        return window
+    }
+}
+
 // MARK: - STFT ComputeOperation
 
 /// Short-Time Fourier Transform using Accelerate/vDSP.
@@ -70,24 +98,18 @@ public struct STFT: ComputeOperation {
         let nFrames = 1 + (paddedLength - nFFT) / hopLength
 
         // --- 3. Prepare window ---
-        let window = Windows.hann(length: winLength, periodic: true)
-        // If winLength < nFFT, we zero-pad the window to nFFT (center it).
-        // If winLength == nFFT, no padding needed.
-        let fullWindow: [Float]
-        if winLength < nFFT {
-            let padBefore = (nFFT - winLength) / 2
-            let padAfter = nFFT - winLength - padBefore
-            fullWindow = [Float](repeating: 0, count: padBefore)
-                       + window
-                       + [Float](repeating: 0, count: padAfter)
-        } else {
-            fullWindow = window
-        }
+        let fullWindow = prepareWindow(winLength: winLength, nFFT: nFFT)
 
         // --- 4. Set up vDSP FFT ---
+        guard isPowerOfTwo(nFFT) else {
+            // vDSP requires power-of-2 FFT sizes; return empty result
+            let out = Signal(data: [], shape: [nFreqs, 0], sampleRate: input.signal.sampleRate)
+            return STFTOutput(magnitude: out)
+        }
         let log2n = vDSP_Length(log2(Double(nFFT)))
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
-            fatalError("Failed to create FFT setup for nFFT=\(nFFT)")
+            let out = Signal(data: [], shape: [nFreqs, 0], sampleRate: input.signal.sampleRate)
+            return STFTOutput(magnitude: out)
         }
         defer { vDSP_destroy_fftsetup(fftSetup) }
 
@@ -230,20 +252,15 @@ public struct STFT: ComputeOperation {
         let nFrames = 1 + (padded.count - nFFT) / hop
 
         // --- 2. Prepare window ---
-        let window = Windows.hann(length: win, periodic: true)
-        let fullWindow: [Float]
-        if win < nFFT {
-            let padBefore = (nFFT - win) / 2
-            let padAfter = nFFT - win - padBefore
-            fullWindow = [Float](repeating: 0, count: padBefore) + window + [Float](repeating: 0, count: padAfter)
-        } else {
-            fullWindow = window
-        }
+        let fullWindow = prepareWindow(winLength: win, nFFT: nFFT)
 
         // --- 3. Set up vDSP FFT ---
+        guard isPowerOfTwo(nFFT) else {
+            return Signal(data: [], shape: [nFreqs, 0], sampleRate: signal.sampleRate)
+        }
         let log2n = vDSP_Length(log2(Double(nFFT)))
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
-            fatalError("Failed to create FFT setup for nFFT=\(nFFT)")
+            return Signal(data: [], shape: [nFreqs, 0], sampleRate: signal.sampleRate)
         }
         defer { vDSP_destroy_fftsetup(fftSetup) }
 
@@ -364,17 +381,7 @@ extension STFT {
         let nFrames = 1 + (paddedLength - nFFT) / hopLength
 
         // --- 3. Prepare window ---
-        let window = Windows.hann(length: winLength, periodic: true)
-        let fullWindow: [Float]
-        if winLength < nFFT {
-            let padBefore = (nFFT - winLength) / 2
-            let padAfter = nFFT - winLength - padBefore
-            fullWindow = [Float](repeating: 0, count: padBefore)
-                       + window
-                       + [Float](repeating: 0, count: padAfter)
-        } else {
-            fullWindow = window
-        }
+        let fullWindow = prepareWindow(winLength: winLength, nFFT: nFFT)
 
         // --- 4. Frame + window on CPU -> [nFrames, nFFT] ---
         var framedData = [Float](repeating: 0, count: nFrames * nFFT)
@@ -529,22 +536,15 @@ extension STFT {
         let nFrames = 1 + (paddedLength - nFFT) / hop
 
         // --- 3. Prepare window ---
-        let window = Windows.hann(length: win, periodic: true)
-        let fullWindow: [Float]
-        if win < nFFT {
-            let padBefore = (nFFT - win) / 2
-            let padAfter = nFFT - win - padBefore
-            fullWindow = [Float](repeating: 0, count: padBefore)
-                       + window
-                       + [Float](repeating: 0, count: padAfter)
-        } else {
-            fullWindow = window
-        }
+        let fullWindow = prepareWindow(winLength: win, nFFT: nFFT)
 
         // --- 4. Set up vDSP FFT ---
+        guard isPowerOfTwo(nFFT) else {
+            return Signal(complexData: [], shape: [nFreqs, 0], sampleRate: signal.sampleRate)
+        }
         let log2n = vDSP_Length(log2(Double(nFFT)))
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
-            fatalError("Failed to create FFT setup for nFFT=\(nFFT)")
+            return Signal(complexData: [], shape: [nFreqs, 0], sampleRate: signal.sampleRate)
         }
         defer { vDSP_destroy_fftsetup(fftSetup) }
 
@@ -700,17 +700,7 @@ extension STFT {
         let expectedLength = nFFT + (nFrames - 1) * hop
 
         // --- 1. Prepare synthesis window ---
-        let window = Windows.hann(length: win, periodic: true)
-        let fullWindow: [Float]
-        if win < nFFT {
-            let padBefore = (nFFT - win) / 2
-            let padAfter = nFFT - win - padBefore
-            fullWindow = [Float](repeating: 0, count: padBefore)
-                       + window
-                       + [Float](repeating: 0, count: padAfter)
-        } else {
-            fullWindow = window
-        }
+        let fullWindow = prepareWindow(winLength: win, nFFT: nFFT)
 
         // --- 2. Compute window normalization (sum of squared windows at each output sample) ---
         // This is the COLA (Constant Overlap-Add) normalization factor.
@@ -723,9 +713,14 @@ extension STFT {
         }
 
         // --- 3. Set up vDSP inverse FFT ---
+        guard isPowerOfTwo(nFFT) else {
+            return Signal(data: [Float](repeating: 0, count: expectedLength),
+                         sampleRate: complexSTFT.sampleRate)
+        }
         let log2n = vDSP_Length(log2(Double(nFFT)))
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
-            fatalError("Failed to create FFT setup for nFFT=\(nFFT)")
+            return Signal(data: [Float](repeating: 0, count: expectedLength),
+                         sampleRate: complexSTFT.sampleRate)
         }
         defer { vDSP_destroy_fftsetup(fftSetup) }
 
