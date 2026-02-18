@@ -5,6 +5,44 @@ from ._native import ffi, lib
 from ._buffer import buffer_to_numpy
 
 
+def db_to_amplitude(S_db, ref=1.0):
+    """Convert dB-scaled values back to amplitude (magnitude).
+
+    Parameters
+    ----------
+    S_db : np.ndarray
+        Input dB-scaled spectrogram.
+    ref : float
+        Reference amplitude. Default: 1.0.
+
+    Returns
+    -------
+    np.ndarray
+        Amplitude values: ``ref * 10^(S_db / 20)``.
+    """
+    S_db = np.asarray(S_db, dtype=np.float32)
+    return ref * np.power(10.0, S_db / 20.0)
+
+
+def db_to_power(S_db, ref=1.0):
+    """Convert dB-scaled values back to power.
+
+    Parameters
+    ----------
+    S_db : np.ndarray
+        Input dB-scaled spectrogram.
+    ref : float
+        Reference power. Default: 1.0.
+
+    Returns
+    -------
+    np.ndarray
+        Power values: ``ref * 10^(S_db / 10)``.
+    """
+    S_db = np.asarray(S_db, dtype=np.float32)
+    return ref * np.power(10.0, S_db / 10.0)
+
+
 def stft(y, n_fft=2048, hop_length=None, win_length=None, center=True):
     """Compute the Short-Time Fourier Transform (magnitude).
 

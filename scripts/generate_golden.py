@@ -21,9 +21,25 @@ stft_complex = librosa.stft(signal_440, n_fft=2048, hop_length=512, win_length=2
 stft_magnitude = np.abs(stft_complex)
 np.save(os.path.join(GOLDEN_DIR, "stft_440hz_default_magnitude.npy"), stft_magnitude)
 
+# dB scaling golden files
+# amplitude_to_db with ref=np.max (librosa default)
+stft_amplitude_db = librosa.amplitude_to_db(stft_magnitude, ref=np.max)
+np.save(os.path.join(GOLDEN_DIR, "stft_440hz_amplitude_db.npy"), stft_amplitude_db)
+
+# amplitude_to_db with ref=1.0
+stft_amplitude_db_ref1 = librosa.amplitude_to_db(stft_magnitude, ref=1.0)
+np.save(os.path.join(GOLDEN_DIR, "stft_440hz_amplitude_db_ref1.npy"), stft_amplitude_db_ref1)
+
+# power_to_db with ref=np.max
+stft_power = stft_magnitude ** 2
+stft_power_db = librosa.power_to_db(stft_power, ref=np.max)
+np.save(os.path.join(GOLDEN_DIR, "stft_440hz_power_db.npy"), stft_power_db)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
 print(f"STFT dtype: {stft_magnitude.dtype}")
 print(f"STFT max: {stft_magnitude.max():.6f}")
+print(f"amplitude_to_db shape: {stft_amplitude_db.shape}, range: [{stft_amplitude_db.min():.2f}, {stft_amplitude_db.max():.2f}]")
+print(f"power_to_db shape: {stft_power_db.shape}, range: [{stft_power_db.min():.2f}, {stft_power_db.max():.2f}]")
 print(f"Golden files saved to {GOLDEN_DIR}")

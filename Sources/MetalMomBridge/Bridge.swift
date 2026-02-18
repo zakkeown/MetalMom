@@ -203,6 +203,91 @@ public func mm_istft(
     return MM_OK
 }
 
+// MARK: - dB Scaling
+
+@_cdecl("mm_amplitude_to_db")
+public func mm_amplitude_to_db(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ ref: Float,
+    _ amin: Float,
+    _ topDb: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, sampleRate: 0)
+
+    // topDb <= 0 means no clipping (Python passes 0.0 for None)
+    let topDbOpt: Float? = topDb > 0 ? topDb : nil
+    let result = Scaling.amplitudeToDb(signal, ref: ref, amin: amin, topDb: topDbOpt)
+
+    let outCount = result.count
+    let outData = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
+    result.withUnsafeBufferPointer { srcBuf in
+        outData.initialize(from: srcBuf.baseAddress!, count: outCount)
+    }
+
+    out.pointee.data = outData
+    out.pointee.ndim = 1
+    withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+        tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+            for i in 0..<8 { shapePtr[i] = 0 }
+            shapePtr[0] = Int64(outCount)
+        }
+    }
+    out.pointee.dtype = 0
+    out.pointee.count = Int64(outCount)
+
+    return MM_OK
+}
+
+@_cdecl("mm_power_to_db")
+public func mm_power_to_db(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ ref: Float,
+    _ amin: Float,
+    _ topDb: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0, let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, sampleRate: 0)
+
+    let topDbOpt: Float? = topDb > 0 ? topDb : nil
+    let result = Scaling.powerToDb(signal, ref: ref, amin: amin, topDb: topDbOpt)
+
+    let outCount = result.count
+    let outData = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
+    result.withUnsafeBufferPointer { srcBuf in
+        outData.initialize(from: srcBuf.baseAddress!, count: outCount)
+    }
+
+    out.pointee.data = outData
+    out.pointee.ndim = 1
+    withUnsafeMutablePointer(to: &out.pointee.shape) { tuplePtr in
+        tuplePtr.withMemoryRebound(to: Int64.self, capacity: 8) { shapePtr in
+            for i in 0..<8 { shapePtr[i] = 0 }
+            shapePtr[0] = Int64(outCount)
+        }
+    }
+    out.pointee.dtype = 0
+    out.pointee.count = Int64(outCount)
+
+    return MM_OK
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

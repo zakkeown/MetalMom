@@ -43,6 +43,14 @@ int32_t mm_istft(mm_context ctx, const float* stft_data, int64_t stft_count,
                  int32_t hop_length, int32_t win_length, int32_t center,
                  int64_t output_length, MMBuffer* out);
 
+/* dB Scaling */
+int32_t mm_amplitude_to_db(mm_context ctx, const float* data, int64_t count,
+                           float ref, float amin, float top_db,
+                           MMBuffer* out);
+int32_t mm_power_to_db(mm_context ctx, const float* data, int64_t count,
+                       float ref, float amin, float top_db,
+                       MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 
