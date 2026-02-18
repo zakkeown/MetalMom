@@ -379,6 +379,17 @@ ffi.cdef("""
                            int32_t n_iter, int32_t hop_length, int32_t win_length,
                            int32_t center, int64_t output_length, MMBuffer* out);
 
+    /* PCEN (Per-Channel Energy Normalization) */
+    int32_t mm_pcen(mm_context ctx, const float* data, int64_t count,
+                    int32_t n_bands, int32_t n_frames, int32_t sample_rate,
+                    int32_t hop_length, float gain, float bias,
+                    float power, float time_constant, float eps,
+                    MMBuffer* out);
+
+    /* A-Weighting */
+    int32_t mm_a_weighting(mm_context ctx, const float* frequencies, int32_t n_freqs,
+                           MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

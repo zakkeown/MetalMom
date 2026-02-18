@@ -1344,3 +1344,182 @@ def fourier_tempogram(y=None, sr=22050, onset_envelope=None, hop_length=512,
         return buffer_to_numpy(out)
     finally:
         lib.mm_destroy(ctx)
+
+
+def pcen(S, sr=22050, hop_length=512, gain=0.98, bias=2.0, power=0.5,
+         time_constant=0.06, eps=1e-6, **kwargs):
+    """Apply Per-Channel Energy Normalization (PCEN) to a spectrogram.
+
+    PCEN is an adaptive gain control technique that normalizes each
+    frequency channel using an IIR-smoothed version of the input.
+
+    Parameters
+    ----------
+    S : np.ndarray
+        Input spectrogram, shape ``(n_bands, n_frames)``. Should be
+        non-negative (e.g. magnitude or power spectrogram).
+    sr : int
+        Sample rate. Default: 22050.
+    hop_length : int
+        Hop length used to compute the spectrogram. Default: 512.
+    gain : float
+        Gain exponent for the AGC denominator. Default: 0.98.
+    bias : float
+        Bias added before power compression. Default: 2.0.
+    power : float
+        Compression exponent. Default: 0.5.
+    time_constant : float
+        Time constant for IIR smoothing in seconds. Default: 0.06.
+    eps : float
+        Small constant for numerical stability. Default: 1e-6.
+
+    Returns
+    -------
+    np.ndarray
+        PCEN-normalized spectrogram, same shape as input.
+    """
+    S = np.ascontiguousarray(S, dtype=np.float32)
+    if S.ndim == 1:
+        S = S.reshape(1, -1)
+
+    n_bands, n_frames = S.shape
+    flat = S.ravel()
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        data_ptr = ffi.cast("const float*", flat.ctypes.data)
+
+        status = lib.mm_pcen(
+            ctx, data_ptr, len(flat),
+            n_bands, n_frames, sr, hop_length,
+            float(gain), float(bias), float(power),
+            float(time_constant), float(eps),
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_pcen failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def a_weighting(frequencies):
+    """Compute A-weighting curve values for given frequencies.
+
+    A-weighting (IEC 61672:2003) approximates the frequency response of
+    human hearing at moderate sound pressure levels.
+
+    Parameters
+    ----------
+    frequencies : array-like
+        Frequencies in Hz.
+
+    Returns
+    -------
+    np.ndarray
+        A-weighting values in dB, same length as input.
+    """
+    frequencies = np.ascontiguousarray(frequencies, dtype=np.float32)
+    n_freqs = len(frequencies)
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        freq_ptr = ffi.cast("const float*", frequencies.ctypes.data)
+
+        status = lib.mm_a_weighting(ctx, freq_ptr, n_freqs, out)
+        if status != 0:
+            raise RuntimeError(f"mm_a_weighting failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def b_weighting(frequencies):
+    """Compute B-weighting curve values for given frequencies.
+
+    Parameters
+    ----------
+    frequencies : array-like
+        Frequencies in Hz.
+
+    Returns
+    -------
+    np.ndarray
+        B-weighting values in dB.
+    """
+    frequencies = np.asarray(frequencies, dtype=np.float64)
+    f2 = frequencies ** 2
+    c1 = 12194.0 ** 2
+    c2 = 20.6 ** 2
+    c5 = 158.5 ** 2
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        num = c1 ** 2 * np.abs(frequencies) ** 3
+        den = (f2 + c2) * np.sqrt(f2 + c5) * (f2 + c1)
+        rB = np.where(den > 0, num / den, 0.0)
+        result = np.where(rB > 0, 20.0 * np.log10(rB) + 0.17, -np.inf)
+    return result.astype(np.float32)
+
+
+def c_weighting(frequencies):
+    """Compute C-weighting curve values for given frequencies.
+
+    Parameters
+    ----------
+    frequencies : array-like
+        Frequencies in Hz.
+
+    Returns
+    -------
+    np.ndarray
+        C-weighting values in dB.
+    """
+    frequencies = np.asarray(frequencies, dtype=np.float64)
+    f2 = frequencies ** 2
+    c1 = 12194.0 ** 2
+    c2 = 20.6 ** 2
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        num = c1 ** 2 * f2
+        den = (f2 + c2) * (f2 + c1)
+        rC = np.where(den > 0, num / den, 0.0)
+        result = np.where(rC > 0, 20.0 * np.log10(rC) + 0.06, -np.inf)
+    return result.astype(np.float32)
+
+
+def d_weighting(frequencies):
+    """Compute D-weighting curve values for given frequencies.
+
+    Parameters
+    ----------
+    frequencies : array-like
+        Frequencies in Hz.
+
+    Returns
+    -------
+    np.ndarray
+        D-weighting values in dB.
+    """
+    frequencies = np.asarray(frequencies, dtype=np.float64)
+    f2 = frequencies ** 2
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        hNum = (1037918.48 - f2) ** 2 + 1080768.16 * f2
+        hDen = (9837328.0 - f2) ** 2 + 11723776.0 * f2
+        h = np.where(hDen > 0, hNum / hDen, 0.0)
+
+        dDen = (f2 + 79919.29) * (f2 + 1345600.0)
+        inner = np.where(dDen > 0, h / dDen, 0.0)
+        rD = np.abs(frequencies) / 6.8966888496476e-5 * np.sqrt(inner)
+        result = np.where(rD > 0, 20.0 * np.log10(rD), -np.inf)
+    return result.astype(np.float32)

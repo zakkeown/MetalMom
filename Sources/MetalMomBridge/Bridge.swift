@@ -2782,6 +2782,72 @@ public func mm_griffinlim(
     return fillBuffer(result, out)
 }
 
+// MARK: - PCEN
+
+@_cdecl("mm_pcen")
+public func mm_pcen(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<Float>?,
+    _ count: Int64,
+    _ nBands: Int32,
+    _ nFrames: Int32,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ gain: Float,
+    _ bias: Float,
+    _ power: Float,
+    _ timeConstant: Float,
+    _ eps: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let data = data, count > 0,
+          nBands > 0, nFrames > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let length = Int(count)
+    let inputArray = Array(UnsafeBufferPointer(start: data, count: length))
+    let signal = Signal(data: inputArray, shape: [Int(nBands), Int(nFrames)],
+                        sampleRate: Int(sampleRate))
+
+    let hopOpt = hopLength > 0 ? Int(hopLength) : 512
+
+    let result = Scaling.pcen(
+        signal,
+        sr: Int(sampleRate),
+        hopLength: hopOpt,
+        gain: gain,
+        bias: bias,
+        power: power,
+        timeConstant: timeConstant,
+        eps: eps
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - A-Weighting
+
+@_cdecl("mm_a_weighting")
+public func mm_a_weighting(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ frequencies: UnsafePointer<Float>?,
+    _ nFreqs: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let frequencies = frequencies, nFreqs > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let freqArray = Array(UnsafeBufferPointer(start: frequencies, count: Int(nFreqs)))
+    let weights = Scaling.aWeighting(frequencies: freqArray)
+
+    let result = Signal(data: weights, shape: [Int(nFreqs)], sampleRate: 0)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
