@@ -62,6 +62,13 @@ ffi.cdef("""
                                int32_t n_mels, float f_min, float f_max,
                                MMBuffer* out);
 
+    /* MFCC */
+    int32_t mm_mfcc(mm_context ctx, const float* signal_data, int64_t signal_length,
+                    int32_t sample_rate, int32_t n_mfcc, int32_t n_fft,
+                    int32_t hop_length, int32_t win_length,
+                    int32_t n_mels, float f_min, float f_max,
+                    int32_t center, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

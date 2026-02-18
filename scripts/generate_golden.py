@@ -65,6 +65,21 @@ mel_spec_custom = librosa.feature.melspectrogram(
 )
 np.save(os.path.join(GOLDEN_DIR, "mel_spectrogram_440hz_64_fmin300_fmax8000.npy"), mel_spec_custom)
 
+# ── MFCC golden files ──
+# Default params: n_mfcc=20, n_fft=2048, hop_length=512, n_mels=128
+mfcc_default = librosa.feature.mfcc(y=signal_440, sr=22050, n_mfcc=20)
+np.save(os.path.join(GOLDEN_DIR, "mfcc_440hz_default.npy"), mfcc_default)
+
+# Custom params: n_mfcc=13, n_fft=1024, n_mels=40
+mfcc_13_1024 = librosa.feature.mfcc(y=signal_440, sr=22050, n_mfcc=13, n_fft=1024, n_mels=40)
+np.save(os.path.join(GOLDEN_DIR, "mfcc_440hz_13_1024.npy"), mfcc_13_1024)
+
+# Custom fmin/fmax: n_mfcc=20, n_fft=2048, n_mels=64, fmin=300, fmax=8000
+mfcc_custom = librosa.feature.mfcc(
+    y=signal_440, sr=22050, n_mfcc=20, n_fft=2048, n_mels=64, fmin=300, fmax=8000
+)
+np.save(os.path.join(GOLDEN_DIR, "mfcc_440hz_20_64_fmin300_fmax8000.npy"), mfcc_custom)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
@@ -78,4 +93,7 @@ print(f"mel_fb_custom shape: {mel_fb_custom.shape}")
 print(f"mel_spec_default shape: {mel_spec_default.shape}, dtype: {mel_spec_default.dtype}, range: [{mel_spec_default.min():.6f}, {mel_spec_default.max():.6f}]")
 print(f"mel_spec_40_1024 shape: {mel_spec_40_1024.shape}")
 print(f"mel_spec_custom shape: {mel_spec_custom.shape}")
+print(f"mfcc_default shape: {mfcc_default.shape}, dtype: {mfcc_default.dtype}, range: [{mfcc_default.min():.4f}, {mfcc_default.max():.4f}]")
+print(f"mfcc_13_1024 shape: {mfcc_13_1024.shape}")
+print(f"mfcc_custom shape: {mfcc_custom.shape}")
 print(f"Golden files saved to {GOLDEN_DIR}")
