@@ -13,7 +13,7 @@ Usage::
 # -- Core audio I/O and transforms --
 from .core import (
     load, resample, stft, istft, get_duration, get_samplerate,
-    reassigned_spectrogram, phase_vocoder, griffinlim,
+    reassigned_spectrogram, phase_vocoder, griffinlim, griffinlim_cqt,
     # Signal generation
     tone, chirp, clicks, stream,
     # dB conversions (top-level in librosa)

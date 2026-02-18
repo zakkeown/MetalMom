@@ -3,7 +3,7 @@
 import numpy as np
 
 from metalmom.core import load, resample, stft, istft, db_to_amplitude, db_to_power, tone, chirp, clicks, get_duration, get_samplerate, stream, reassigned_spectrogram
-from metalmom.effects import phase_vocoder, griffinlim
+from metalmom.effects import phase_vocoder, griffinlim, griffinlim_cqt
 from metalmom.feature import amplitude_to_db, power_to_db, pcen
 from metalmom.pitch import yin, pyin, piptrack, estimate_tuning
 from metalmom.convert import (

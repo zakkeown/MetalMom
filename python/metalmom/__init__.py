@@ -12,12 +12,13 @@ from .feature import (
     delta, stack_memory, poly_features,
     tempo, tempogram, fourier_tempogram,
     mel_to_audio, mfcc_to_mel, mfcc_to_audio,
+    pcen, a_weighting, b_weighting, c_weighting, d_weighting,
 )
 from .evaluate import onset_evaluate, beat_evaluate, tempo_evaluate, chord_accuracy
 from .onset import onset_strength, onset_detect
 from .beat import beat_track, plp
 from .pitch import yin, pyin, piptrack, estimate_tuning
-from .effects import hpss, harmonic, percussive, time_stretch, pitch_shift, trim, split, preemphasis, deemphasis, phase_vocoder, griffinlim
+from .effects import hpss, harmonic, percussive, time_stretch, pitch_shift, trim, split, preemphasis, deemphasis, phase_vocoder, griffinlim, griffinlim_cqt
 from .key import key_detect
 from .chord import chord_detect
 from .transcribe import piano_transcribe

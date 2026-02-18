@@ -396,6 +396,12 @@ ffi.cdef("""
                            float f_min, int32_t bins_per_octave, int32_t n_octaves,
                            int32_t n_chroma, float norm, MMBuffer* out);
 
+    /* Chroma VQT */
+    int32_t mm_chroma_vqt(mm_context ctx, const float* signal_data, int64_t signal_length,
+                           int32_t sample_rate, int32_t hop_length,
+                           float f_min, int32_t bins_per_octave, int32_t n_octaves,
+                           float gamma, int32_t n_chroma, float norm, MMBuffer* out);
+
     /* Chroma CENS */
     int32_t mm_chroma_cens(mm_context ctx, const float* signal_data, int64_t signal_length,
                             int32_t sample_rate, int32_t hop_length,

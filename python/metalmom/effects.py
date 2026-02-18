@@ -8,7 +8,7 @@ from ._buffer import buffer_to_numpy
 __all__ = [
     "hpss", "harmonic", "percussive", "time_stretch", "pitch_shift",
     "trim", "split", "preemphasis", "deemphasis",
-    "phase_vocoder", "griffinlim",
+    "phase_vocoder", "griffinlim", "griffinlim_cqt",
 ]
 
 
@@ -641,6 +641,67 @@ def griffinlim(S, n_iter=32, hop_length=None, win_length=None, center=True,
         )
         if status != 0:
             raise RuntimeError(f"mm_griffinlim failed with status {status}")
+
+        result = buffer_to_numpy(out)
+        return result.ravel()
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def griffinlim_cqt(C, n_iter=32, sr=22050, hop_length=None,
+                   fmin=32.70, bins_per_octave=12, **kwargs):
+    """Reconstruct audio from a CQT magnitude spectrogram using Griffin-Lim.
+
+    Approximate inverse CQT using the Griffin-Lim algorithm. The CQT
+    magnitude is mapped back to an approximate STFT magnitude via a
+    pseudo-inverse of the CQT filterbank, then standard Griffin-Lim
+    phase estimation is applied.
+
+    Parameters
+    ----------
+    C : np.ndarray
+        CQT magnitude spectrogram, shape (n_bins, n_frames).
+    n_iter : int
+        Number of Griffin-Lim iterations. Default: 32.
+    sr : int
+        Sample rate. Default: 22050.
+    hop_length : int or None
+        Hop length. Default: auto-selected based on CQT parameters.
+    fmin : float
+        Lowest CQT frequency in Hz. Default: 32.70 (C1).
+    bins_per_octave : int
+        Number of frequency bins per octave. Default: 12.
+
+    Returns
+    -------
+    np.ndarray
+        Reconstructed audio signal, 1-D float32 array.
+    """
+    if C is None:
+        raise ValueError("C must be provided")
+
+    C = np.ascontiguousarray(C, dtype=np.float32)
+    n_bins, n_frames = C.shape
+
+    c_hop = int(hop_length) if hop_length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        mag_ptr = ffi.cast("const float*", C.ctypes.data)
+
+        status = lib.mm_griffinlim_cqt(
+            ctx, mag_ptr, C.size,
+            n_bins, n_frames, sr,
+            n_iter, c_hop,
+            float(fmin), bins_per_octave,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_griffinlim_cqt failed with status {status}")
 
         result = buffer_to_numpy(out)
         return result.ravel()

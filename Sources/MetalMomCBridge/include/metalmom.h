@@ -375,6 +375,13 @@ int32_t mm_griffinlim(mm_context ctx, const float* mag_data, int64_t mag_count,
                        int32_t n_iter, int32_t hop_length, int32_t win_length,
                        int32_t center, int64_t output_length, MMBuffer* out);
 
+/* Griffin-Lim CQT */
+int32_t mm_griffinlim_cqt(mm_context ctx, const float* mag_data, int64_t mag_count,
+                           int32_t n_bins, int32_t n_frames, int32_t sr,
+                           int32_t n_iter, int32_t hop_length,
+                           float fmin, int32_t bins_per_octave,
+                           MMBuffer* out);
+
 /* PCEN (Per-Channel Energy Normalization) */
 int32_t mm_pcen(mm_context ctx, const float* data, int64_t count,
                 int32_t n_bands, int32_t n_frames, int32_t sample_rate,
@@ -391,6 +398,12 @@ int32_t mm_chroma_cqt(mm_context ctx, const float* signal_data, int64_t signal_l
                        int32_t sample_rate, int32_t hop_length,
                        float f_min, int32_t bins_per_octave, int32_t n_octaves,
                        int32_t n_chroma, float norm, MMBuffer* out);
+
+/* Chroma VQT */
+int32_t mm_chroma_vqt(mm_context ctx, const float* signal_data, int64_t signal_length,
+                       int32_t sample_rate, int32_t hop_length,
+                       float f_min, int32_t bins_per_octave, int32_t n_octaves,
+                       float gamma, int32_t n_chroma, float norm, MMBuffer* out);
 
 /* Chroma CENS */
 int32_t mm_chroma_cens(mm_context ctx, const float* signal_data, int64_t signal_length,

@@ -577,43 +577,36 @@ def chroma_vqt(y=None, sr=22050, hop_length=None, fmin=32.7,
     -------
     np.ndarray
         VQT chroma features, shape ``(n_chroma, n_frames)``.
-
-    Notes
-    -----
-    This function is implemented purely in Python using the native VQT
-    backend and chroma folding, as the VQT chroma bridge is not yet
-    exposed through the C ABI.
     """
     if y is None:
         raise ValueError("y must be provided")
 
-    # Use CQT chroma with gamma=0 as a reasonable fallback
-    # (VQT with gamma=0 is equivalent to CQT)
-    # For non-zero gamma, compute VQT then fold in Python
-    from .cqt import vqt as compute_vqt
+    y = np.ascontiguousarray(y, dtype=np.float32)
 
-    vqt_mag = compute_vqt(y, sr=sr, hop_length=hop_length, fmin=fmin,
-                           fmax=fmin * 2.0 ** n_octaves,
-                           bins_per_octave=bins_per_octave, gamma=gamma)
+    hop = int(hop_length) if hop_length is not None else 0
+    c_norm = float(norm) if norm is not None else 0.0
 
-    n_bins, n_frames = vqt_mag.shape
-    bins_per_chroma = bins_per_octave // n_chroma
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
 
-    # Fold across octaves into chroma bins
-    chroma = np.zeros((n_chroma, n_frames), dtype=np.float32)
-    for b in range(n_bins):
-        pos_in_octave = b % bins_per_octave
-        if bins_per_chroma > 0:
-            chroma_idx = (pos_in_octave // bins_per_chroma) % n_chroma
-        else:
-            chroma_idx = pos_in_octave % n_chroma
-        chroma[chroma_idx] += vqt_mag[b]
+    try:
+        out = ffi.new("MMBuffer*")
+        signal_ptr = ffi.cast("const float*", y.ctypes.data)
 
-    # Normalize if requested
-    if norm is not None:
-        chroma = _normalize_frames(chroma, norm=norm)
+        status = lib.mm_chroma_vqt(
+            ctx, signal_ptr, len(y),
+            sr, hop,
+            float(fmin), bins_per_octave, n_octaves,
+            float(gamma), n_chroma, c_norm,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_chroma_vqt failed with status {status}")
 
-    return chroma
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
 
 
 def spectral_centroid(y=None, sr=22050, S=None, n_fft=2048, hop_length=None,

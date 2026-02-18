@@ -328,4 +328,122 @@ final class InversionTests: XCTestCase {
             XCTAssertTrue(allNonNegative(stftMag))
         }
     }
+
+    // MARK: - griffinLimCQT Tests
+
+    func testGriffinLimCQTOutputLength() {
+        // Reconstruct audio from a CQT magnitude spectrogram and verify
+        // that the output has a reasonable length.
+        let sr = 22050
+        let signal = makeSine(frequency: 440.0, sr: sr, duration: 0.5)
+
+        let cqtMag = CQT.compute(signal: signal, sr: sr, fMin: 32.70, binsPerOctave: 12)
+        let nBins = cqtMag.shape[0]
+        let nFrames = cqtMag.shape[1]
+
+        XCTAssertGreaterThan(nBins, 0, "CQT should produce bins")
+        XCTAssertGreaterThan(nFrames, 0, "CQT should produce frames")
+
+        let reconstructed = PhaseVocoder.griffinLimCQT(
+            magnitude: cqtMag,
+            sr: sr,
+            nIter: 10,
+            fMin: 32.70,
+            binsPerOctave: 12
+        )
+
+        XCTAssertEqual(reconstructed.shape.count, 1,
+                       "griffinLimCQT output should be 1D")
+        XCTAssertGreaterThan(reconstructed.count, 0,
+                             "griffinLimCQT output should not be empty")
+        XCTAssertTrue(allFinite(reconstructed),
+                      "griffinLimCQT output should be finite")
+    }
+
+    func testGriffinLimCQTMagnitudeReconstruction() {
+        // Verify that re-computing CQT of the reconstructed audio
+        // approximately matches the input magnitude.
+        let sr = 22050
+        let signal = makeSine(frequency: 440.0, sr: sr, duration: 1.0)
+
+        let cqtMag = CQT.compute(signal: signal, sr: sr, fMin: 32.70, binsPerOctave: 12)
+        let nBins = cqtMag.shape[0]
+        let nFrames = cqtMag.shape[1]
+
+        let reconstructed = PhaseVocoder.griffinLimCQT(
+            magnitude: cqtMag,
+            sr: sr,
+            nIter: 32,
+            fMin: 32.70,
+            binsPerOctave: 12
+        )
+
+        // Re-compute CQT from reconstructed audio
+        let reconCQT = CQT.compute(signal: reconstructed, sr: sr, fMin: 32.70, binsPerOctave: 12)
+        let reconBins = reconCQT.shape[0]
+        let reconFrames = reconCQT.shape[1]
+
+        let useBins = min(nBins, reconBins)
+        let useFrames = min(nFrames, reconFrames)
+
+        // Compare CQT magnitudes (spectral SNR)
+        var signalPower: Float = 0
+        var noisePower: Float = 0
+
+        cqtMag.withUnsafeBufferPointer { origBuf in
+            reconCQT.withUnsafeBufferPointer { reconBuf in
+                for b in 0..<useBins {
+                    for f in 0..<useFrames {
+                        let origIdx = b * nFrames + f
+                        let reconIdx = b * reconFrames + f
+                        let origVal = origBuf[origIdx]
+                        let reconVal = reconBuf[reconIdx]
+                        let diff = origVal - reconVal
+                        signalPower += origVal * origVal
+                        noisePower += diff * diff
+                    }
+                }
+            }
+        }
+
+        let snr = 10.0 * log10f(signalPower / max(noisePower, 1e-20))
+        // CQT Griffin-Lim is inherently approximate (pseudo-inverse filterbank),
+        // so we accept a lower SNR threshold than STFT Griffin-Lim.
+        XCTAssertGreaterThan(snr, 3.0,
+                             "CQT Griffin-Lim spectral SNR should be > 3 dB (got \(snr) dB)")
+    }
+
+    func testGriffinLimCQTIterations() {
+        // Verify that more iterations do not produce degenerate output,
+        // and that the output remains finite for various iteration counts.
+        let sr = 22050
+        let signal = makeSine(frequency: 440.0, sr: sr, duration: 0.5)
+        let cqtMag = CQT.compute(signal: signal, sr: sr, fMin: 32.70, binsPerOctave: 12)
+
+        for nIter in [1, 5, 16] {
+            let reconstructed = PhaseVocoder.griffinLimCQT(
+                magnitude: cqtMag,
+                sr: sr,
+                nIter: nIter,
+                fMin: 32.70,
+                binsPerOctave: 12
+            )
+
+            XCTAssertGreaterThan(reconstructed.count, 0,
+                                 "Output should not be empty for nIter=\(nIter)")
+            XCTAssertTrue(allFinite(reconstructed),
+                          "Output should be finite for nIter=\(nIter)")
+        }
+    }
+
+    func testGriffinLimCQTEmptyInput() {
+        // Edge case: empty magnitude input
+        let emptyMag = Signal(data: [], shape: [0, 0], sampleRate: 22050)
+        let result = PhaseVocoder.griffinLimCQT(
+            magnitude: emptyMag,
+            sr: 22050,
+            nIter: 10
+        )
+        XCTAssertEqual(result.count, 0, "Empty input should produce empty output")
+    }
 }

@@ -2782,6 +2782,50 @@ public func mm_griffinlim(
     return fillBuffer(result, out)
 }
 
+// MARK: - Griffin-Lim CQT
+
+@_cdecl("mm_griffinlim_cqt")
+public func mm_griffinlim_cqt(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ magData: UnsafePointer<Float>?,
+    _ magCount: Int64,
+    _ nBins: Int32,
+    _ nFrames: Int32,
+    _ sr: Int32,
+    _ nIter: Int32,
+    _ hopLength: Int32,
+    _ fmin: Float,
+    _ binsPerOctave: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let magData = magData,
+          magCount > 0,
+          nBins > 0,
+          nFrames > 0,
+          nIter > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let count = Int(magCount)
+    let inputArray = Array(UnsafeBufferPointer(start: magData, count: count))
+    let magnitude = Signal(data: inputArray, shape: [Int(nBins), Int(nFrames)],
+                            sampleRate: Int(sr))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+
+    let result = PhaseVocoder.griffinLimCQT(
+        magnitude: magnitude,
+        sr: Int(sr),
+        nIter: Int(nIter),
+        hopLength: hopOpt,
+        fMin: fmin,
+        binsPerOctave: Int(binsPerOctave)
+    )
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - PCEN
 
 @_cdecl("mm_pcen")
@@ -2888,6 +2932,55 @@ public func mm_chroma_cqt(
         fMin: fMin,
         binsPerOctave: Int(binsPerOctave),
         nOctaves: Int(nOctaves),
+        nChroma: Int(nChroma),
+        norm: normOpt
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - Chroma VQT
+
+@_cdecl("mm_chroma_vqt")
+public func mm_chroma_vqt(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ signalData: UnsafePointer<Float>?,
+    _ signalLength: Int64,
+    _ sampleRate: Int32,
+    _ hopLength: Int32,
+    _ fMin: Float,
+    _ binsPerOctave: Int32,
+    _ nOctaves: Int32,
+    _ gamma: Float,
+    _ nChroma: Int32,
+    _ norm: Float,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let ctx = ctx,
+          let signalData = signalData,
+          signalLength > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let _ = Unmanaged<MMContextInternal>.fromOpaque(ctx).takeUnretainedValue()
+
+    let length = Int(signalLength)
+    let inputArray = Array(UnsafeBufferPointer(start: signalData, count: length))
+    let signal = Signal(data: inputArray, sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    // norm <= 0 signals no normalization
+    let normOpt: Float? = norm > 0 ? norm : nil
+
+    let result = Chroma.vqt(
+        signal: signal,
+        sr: Int(sampleRate),
+        hopLength: hopOpt,
+        fMin: fMin,
+        binsPerOctave: Int(binsPerOctave),
+        nOctaves: Int(nOctaves),
+        gamma: gamma,
         nChroma: Int(nChroma),
         norm: normOpt
     )
