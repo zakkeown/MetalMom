@@ -45,6 +45,45 @@ public enum Units {
         }
     }
 
+    // MARK: - Double-precision scalar conversions
+
+    /// Convert a frequency in Hz to the mel scale using Double precision.
+    ///
+    /// Matches librosa's float64 mel computation for filterbank generation.
+    /// - Parameter hz: Frequency in Hz.
+    /// - Returns: Corresponding value on the mel scale.
+    public static func hzToMelD(_ hz: Double) -> Double {
+        let f_sp: Double = 200.0 / 3.0
+        var mel = hz / f_sp
+
+        let minLogHz: Double = 1000.0
+        let minLogMel = minLogHz / f_sp  // 15.0
+        let logstep = log(6.4) / 27.0
+
+        if hz >= minLogHz {
+            mel = minLogMel + log(hz / minLogHz) / logstep
+        }
+        return mel
+    }
+
+    /// Convert a mel-scale value back to Hz using Double precision.
+    ///
+    /// Matches librosa's float64 mel computation for filterbank generation.
+    /// - Parameter mel: Value on the mel scale.
+    /// - Returns: Corresponding frequency in Hz.
+    public static func melToHzD(_ mel: Double) -> Double {
+        let f_sp: Double = 200.0 / 3.0
+        let minLogHz: Double = 1000.0
+        let minLogMel = minLogHz / f_sp  // 15.0
+        let logstep = log(6.4) / 27.0
+
+        if mel < minLogMel {
+            return mel * f_sp
+        } else {
+            return minLogHz * exp((mel - minLogMel) * logstep)
+        }
+    }
+
     // MARK: - Vectorised conversions
 
     /// Convert an array of Hz values to mel scale.

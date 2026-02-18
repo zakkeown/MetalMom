@@ -30,12 +30,15 @@ public enum FilterBank {
         let fMaxActual = fMax ?? Float(sr) / 2.0
         let nFreqs = nFFT / 2 + 1
 
-        // Compute nMels + 2 mel-spaced centre frequencies, then convert back to Hz.
-        let melMin = Units.hzToMel(fMin)
-        let melMax = Units.hzToMel(fMaxActual)
-        let melPoints: [Float] = (0..<(nMels + 2)).map { i in
-            Units.melToHz(melMin + Float(i) * (melMax - melMin) / Float(nMels + 1))
+        // Compute nMels + 2 mel-spaced centre frequencies in Double precision,
+        // then convert back to Hz.  Using Double here matches librosa, which
+        // performs all mel-scale arithmetic in float64.
+        let melMin = Units.hzToMelD(Double(fMin))
+        let melMax = Units.hzToMelD(Double(fMaxActual))
+        let melPointsD: [Double] = (0..<(nMels + 2)).map { i in
+            Units.melToHzD(melMin + Double(i) * (melMax - melMin) / Double(nMels + 1))
         }
+        let melPoints: [Float] = melPointsD.map { Float($0) }
 
         // Linear FFT bin frequencies: k * sr / nFFT  for k in 0..<nFreqs
         let fftFreqs: [Float] = (0..<nFreqs).map { k in

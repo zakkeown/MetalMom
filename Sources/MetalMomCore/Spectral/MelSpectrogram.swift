@@ -39,47 +39,50 @@ public enum MelSpectrogram {
     ) -> Signal {
         let sampleRate = sr ?? signal.sampleRate
 
-        // 1. Compute STFT magnitude spectrogram: shape [nFreqs, nFrames]
-        let stftMag = STFT.compute(
-            signal: signal,
-            nFFT: nFFT,
-            hopLength: hopLength,
-            winLength: winLength,
-            center: center
-        )
-
-        let nFreqs = stftMag.shape[0]
-        let nFrames = stftMag.shape[1]
-        let stftCount = stftMag.count
-
-        // 2. Apply power (element-wise)
-        // power=1.0 keeps amplitude, power=2.0 gives power spectrogram
-        let poweredPtr = UnsafeMutablePointer<Float>.allocate(capacity: stftCount)
-        defer { poweredPtr.deallocate() }
-
-        if power == 1.0 {
-            // No transformation needed, just copy
-            stftMag.withUnsafeBufferPointer { src in
-                poweredPtr.initialize(from: src.baseAddress!, count: stftCount)
-            }
-        } else if power == 2.0 {
-            // Square each element using vDSP_vsq
-            stftMag.withUnsafeBufferPointer { src in
-                vDSP_vsq(src.baseAddress!, 1, poweredPtr, 1, vDSP_Length(stftCount))
-            }
+        // 1. Compute spectrogram with the requested power.
+        //    For power=2.0, compute power spectrogram directly (r^2 + i^2)
+        //    to avoid the precision loss of sqrt(r^2+i^2) followed by squaring.
+        let powered: Signal
+        if power == 2.0 {
+            // Direct power spectrogram: avoids sqrt roundtrip
+            powered = STFT.computePowerSpectrogram(
+                signal: signal,
+                nFFT: nFFT,
+                hopLength: hopLength,
+                winLength: winLength,
+                center: center
+            )
         } else {
-            // General power using vForce
-            stftMag.withUnsafeBufferPointer { src in
-                // Copy source to mutable buffer for in-place operation
-                poweredPtr.initialize(from: src.baseAddress!, count: stftCount)
+            // Compute STFT magnitude, then apply power
+            let stftMag = STFT.compute(
+                signal: signal,
+                nFFT: nFFT,
+                hopLength: hopLength,
+                winLength: winLength,
+                center: center
+            )
+
+            if power == 1.0 {
+                powered = stftMag
+            } else {
+                let stftCount = stftMag.count
+                let poweredPtr = UnsafeMutablePointer<Float>.allocate(capacity: stftCount)
+                stftMag.withUnsafeBufferPointer { src in
+                    poweredPtr.initialize(from: src.baseAddress!, count: stftCount)
+                }
+                var count = Int32(stftCount)
+                var powerArr = [Float](repeating: power, count: stftCount)
+                vvpowf(poweredPtr, &powerArr, poweredPtr, &count)
+                let outBuf = UnsafeMutableBufferPointer(start: poweredPtr, count: stftCount)
+                powered = Signal(taking: outBuf, shape: stftMag.shape, sampleRate: stftMag.sampleRate)
             }
-            // Use vvpowsf: poweredPtr[i] = poweredPtr[i]^power
-            var count = Int32(stftCount)
-            var powerArr = [Float](repeating: power, count: stftCount)
-            vvpowf(poweredPtr, &powerArr, poweredPtr, &count)
         }
 
-        // 3. Get mel filterbank: shape [nMels, nFreqs]
+        let nFreqs = powered.shape[0]
+        let nFrames = powered.shape[1]
+
+        // 2. Get mel filterbank: shape [nMels, nFreqs]
+        //    (nFreqs = nFFT/2 + 1)
         let melFB = FilterBank.mel(
             sr: sampleRate,
             nFFT: nFFT,
@@ -88,7 +91,7 @@ public enum MelSpectrogram {
             fMax: fMax
         )
 
-        // 4. Matrix multiply: melFB [nMels, nFreqs] @ powered [nFreqs, nFrames] = [nMels, nFrames]
+        // 3. Matrix multiply: melFB [nMels, nFreqs] @ powered [nFreqs, nFrames] = [nMels, nFrames]
         //
         // Use GPU (MPS) when Metal is available and the workload is large enough
         // to amortise data-transfer overhead.  Falls through to CPU on failure.
@@ -98,7 +101,7 @@ public enum MelSpectrogram {
 
         if useGPU {
             let melWeights: [Float] = melFB.withUnsafeBufferPointer { Array($0) }
-            let poweredArray = Array(UnsafeBufferPointer(start: poweredPtr, count: stftCount))
+            let poweredArray: [Float] = powered.withUnsafeBufferPointer { Array($0) }
 
             if let gpuResult = MetalMatmul.multiply(
                 a: melWeights, aRows: nMels, aCols: nFreqs,
@@ -119,15 +122,17 @@ public enum MelSpectrogram {
         let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
         outPtr.initialize(repeating: 0, count: outCount)
 
-        melFB.withUnsafeBufferPointer { fbBuf in
-            vDSP_mmul(
-                fbBuf.baseAddress!, 1,       // A: melFB [nMels x nFreqs], row-major
-                poweredPtr, 1,               // B: powered [nFreqs x nFrames], row-major
-                outPtr, 1,                   // C: output [nMels x nFrames], row-major
-                vDSP_Length(nMels),
-                vDSP_Length(nFrames),
-                vDSP_Length(nFreqs)
-            )
+        powered.withUnsafeBufferPointer { poweredBuf in
+            melFB.withUnsafeBufferPointer { fbBuf in
+                vDSP_mmul(
+                    fbBuf.baseAddress!, 1,       // A: melFB [nMels x nFreqs], row-major
+                    poweredBuf.baseAddress!, 1,  // B: powered [nFreqs x nFrames], row-major
+                    outPtr, 1,                   // C: output [nMels x nFrames], row-major
+                    vDSP_Length(nMels),
+                    vDSP_Length(nFrames),
+                    vDSP_Length(nFreqs)
+                )
+            }
         }
 
         let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: outCount)

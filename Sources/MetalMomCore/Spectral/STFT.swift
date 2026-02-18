@@ -191,6 +191,134 @@ public struct STFT: ComputeOperation {
                             sampleRate: input.signal.sampleRate)
         return STFTOutput(magnitude: output)
     }
+
+    // MARK: - Power Spectrogram (avoiding sqrt roundtrip)
+
+    /// Compute the power spectrogram (r^2 + i^2) directly from the FFT
+    /// without the intermediate magnitude (sqrt) step.
+    ///
+    /// This avoids the precision loss of `sqrt(r^2 + i^2)` followed by
+    /// squaring, which matters for downstream operations like mel spectrogram
+    /// and MFCC that need power values.
+    ///
+    /// Returns a `Signal` with shape `[nFreqs, nFrames]` containing power values.
+    public static func computePowerSpectrogram(
+        signal: Signal,
+        nFFT: Int,
+        hopLength: Int? = nil,
+        winLength: Int? = nil,
+        center: Bool = true
+    ) -> Signal {
+        let hop = hopLength ?? (nFFT / 4)
+        let win = winLength ?? nFFT
+        let nFreqs = nFFT / 2 + 1
+
+        // --- 1. Optionally pad the signal ---
+        let padded: [Float]
+        if center {
+            let padAmount = nFFT / 2
+            padded = [Float](repeating: 0, count: padAmount)
+                   + signal.withUnsafeBufferPointer { Array($0) }
+                   + [Float](repeating: 0, count: padAmount)
+        } else {
+            padded = signal.withUnsafeBufferPointer { Array($0) }
+        }
+
+        guard padded.count >= nFFT else {
+            return Signal(data: [], shape: [nFreqs, 0], sampleRate: signal.sampleRate)
+        }
+        let nFrames = 1 + (padded.count - nFFT) / hop
+
+        // --- 2. Prepare window ---
+        let window = Windows.hann(length: win, periodic: true)
+        let fullWindow: [Float]
+        if win < nFFT {
+            let padBefore = (nFFT - win) / 2
+            let padAfter = nFFT - win - padBefore
+            fullWindow = [Float](repeating: 0, count: padBefore) + window + [Float](repeating: 0, count: padAfter)
+        } else {
+            fullWindow = window
+        }
+
+        // --- 3. Set up vDSP FFT ---
+        let log2n = vDSP_Length(log2(Double(nFFT)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            fatalError("Failed to create FFT setup for nFFT=\(nFFT)")
+        }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
+
+        let totalElements = nFreqs * nFrames
+        let tempPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalElements)
+        tempPtr.initialize(repeating: 0, count: totalElements)
+
+        let halfN = nFFT / 2
+        let realPart = UnsafeMutablePointer<Float>.allocate(capacity: halfN)
+        let imagPart = UnsafeMutablePointer<Float>.allocate(capacity: halfN)
+        defer {
+            realPart.deallocate()
+            imagPart.deallocate()
+        }
+
+        let windowedFrame = UnsafeMutablePointer<Float>.allocate(capacity: nFFT)
+        defer { windowedFrame.deallocate() }
+
+        // --- 4. Process each frame ---
+        padded.withUnsafeBufferPointer { paddedBuf in
+            fullWindow.withUnsafeBufferPointer { winBuf in
+                for frame in 0..<nFrames {
+                    let start = frame * hop
+
+                    // Apply window
+                    vDSP_vmul(
+                        paddedBuf.baseAddress! + start, 1,
+                        winBuf.baseAddress!, 1,
+                        windowedFrame, 1,
+                        vDSP_Length(nFFT)
+                    )
+
+                    // Pack into split complex
+                    var splitComplex = DSPSplitComplex(realp: realPart, imagp: imagPart)
+                    windowedFrame.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { complexPtr in
+                        vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
+                    }
+
+                    // Forward FFT
+                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(kFFTDirection_Forward))
+
+                    // Scale by 0.5 to normalize (vDSP factor-of-2)
+                    var scale: Float = 0.5
+                    vDSP_vsmul(realPart, 1, &scale, realPart, 1, vDSP_Length(halfN))
+                    vDSP_vsmul(imagPart, 1, &scale, imagPart, 1, vDSP_Length(halfN))
+
+                    let colOffset = frame * nFreqs
+
+                    // DC bin: power = realp[0]^2 (imag is 0)
+                    let dcVal = realPart[0]
+                    tempPtr[colOffset + 0] = dcVal * dcVal
+
+                    // Nyquist bin: power = imagp[0]^2 (imag is 0)
+                    let nyquistVal = imagPart[0]
+                    tempPtr[colOffset + nFreqs - 1] = nyquistVal * nyquistVal
+
+                    // Bins 1..<halfN: power = real^2 + imag^2
+                    // Use vDSP_zvmags which computes squared magnitudes directly
+                    var innerSplit = DSPSplitComplex(
+                        realp: realPart + 1,
+                        imagp: imagPart + 1
+                    )
+                    vDSP_zvmags(&innerSplit, 1, tempPtr + colOffset + 1, 1, vDSP_Length(halfN - 1))
+                }
+            }
+        }
+
+        // --- 5. Transpose to row-major [nFreqs, nFrames] ---
+        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalElements)
+        vDSP_mtrans(tempPtr, 1, outPtr, 1, vDSP_Length(nFreqs), vDSP_Length(nFrames))
+        tempPtr.deallocate()
+
+        let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: totalElements)
+        return Signal(taking: outBuffer, shape: [nFreqs, nFrames], sampleRate: signal.sampleRate)
+    }
 }
 
 // MARK: - GPU Path (MPSGraph)

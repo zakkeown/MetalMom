@@ -19,13 +19,16 @@ def _load_golden(name):
 
 
 def test_amplitude_to_db_ref_max():
-    """Verify amplitude_to_db with ref=np.max matches librosa."""
-    from metalmom import stft, amplitude_to_db
+    """Verify amplitude_to_db with ref=np.max matches librosa.
 
-    signal = _load_golden("signal_440hz_22050sr.npy")
+    Uses the golden STFT magnitude as input so this test isolates the
+    dB conversion from any STFT implementation differences.
+    """
+    from metalmom import amplitude_to_db
+
+    S = _load_golden("stft_440hz_default_magnitude.npy")
     expected = _load_golden("stft_440hz_amplitude_db.npy")
 
-    S = stft(signal, n_fft=2048, hop_length=512, win_length=2048, center=True)
     result = amplitude_to_db(S, ref=np.max)
 
     np.testing.assert_allclose(
@@ -36,13 +39,16 @@ def test_amplitude_to_db_ref_max():
 
 
 def test_amplitude_to_db_ref1():
-    """Verify amplitude_to_db with ref=1.0 matches librosa."""
-    from metalmom import stft, amplitude_to_db
+    """Verify amplitude_to_db with ref=1.0 matches librosa.
 
-    signal = _load_golden("signal_440hz_22050sr.npy")
+    Uses the golden STFT magnitude as input so this test isolates the
+    dB conversion from any STFT implementation differences.
+    """
+    from metalmom import amplitude_to_db
+
+    S = _load_golden("stft_440hz_default_magnitude.npy")
     expected = _load_golden("stft_440hz_amplitude_db_ref1.npy")
 
-    S = stft(signal, n_fft=2048, hop_length=512, win_length=2048, center=True)
     result = amplitude_to_db(S, ref=1.0)
 
     np.testing.assert_allclose(
@@ -53,13 +59,16 @@ def test_amplitude_to_db_ref1():
 
 
 def test_power_to_db_ref_max():
-    """Verify power_to_db with ref=np.max matches librosa."""
-    from metalmom import stft, power_to_db
+    """Verify power_to_db with ref=np.max matches librosa.
 
-    signal = _load_golden("signal_440hz_22050sr.npy")
+    Uses the golden STFT magnitude as input so this test isolates the
+    dB conversion from any STFT implementation differences.
+    """
+    from metalmom import power_to_db
+
+    S = _load_golden("stft_440hz_default_magnitude.npy")
     expected = _load_golden("stft_440hz_power_db.npy")
 
-    S = stft(signal, n_fft=2048, hop_length=512, win_length=2048, center=True)
     S_power = S ** 2
     result = power_to_db(S_power, ref=np.max)
 
