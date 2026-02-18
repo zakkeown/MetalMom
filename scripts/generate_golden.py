@@ -80,6 +80,19 @@ mfcc_custom = librosa.feature.mfcc(
 )
 np.save(os.path.join(GOLDEN_DIR, "mfcc_440hz_20_64_fmin300_fmax8000.npy"), mfcc_custom)
 
+# ── Chroma STFT golden files ──
+# No normalization: n_chroma=12, n_fft=2048, hop_length=512, norm=None
+chroma_no_norm = librosa.feature.chroma_stft(y=signal_440, sr=22050, norm=None)
+np.save(os.path.join(GOLDEN_DIR, "chroma_stft_440hz_no_norm.npy"), chroma_no_norm)
+
+# librosa default (norm=inf): n_chroma=12, n_fft=2048, hop_length=512
+chroma_default = librosa.feature.chroma_stft(y=signal_440, sr=22050)
+np.save(os.path.join(GOLDEN_DIR, "chroma_stft_440hz_default.npy"), chroma_default)
+
+# Custom params: n_fft=1024, norm=None
+chroma_1024 = librosa.feature.chroma_stft(y=signal_440, sr=22050, n_fft=1024, norm=None)
+np.save(os.path.join(GOLDEN_DIR, "chroma_stft_440hz_1024.npy"), chroma_1024)
+
 # Save shape info for verification
 print(f"Signal shape: {signal_440.shape}")
 print(f"STFT shape: {stft_magnitude.shape}")
