@@ -988,6 +988,44 @@ public func mm_poly_features(
     return fillBuffer(result, out)
 }
 
+// MARK: - Audio Info
+
+@_cdecl("mm_get_duration")
+public func mm_get_duration(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ path: UnsafePointer<CChar>?,
+    _ outDuration: UnsafeMutablePointer<Float>?
+) -> Int32 {
+    guard let path = path, let outDuration = outDuration else {
+        return MM_ERR_INVALID_INPUT
+    }
+    do {
+        let dur = try AudioIO.getDuration(path: String(cString: path))
+        outDuration.pointee = Float(dur)
+        return MM_OK
+    } catch {
+        return MM_ERR_INVALID_INPUT
+    }
+}
+
+@_cdecl("mm_get_sample_rate")
+public func mm_get_sample_rate(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ path: UnsafePointer<CChar>?,
+    _ outSR: UnsafeMutablePointer<Int32>?
+) -> Int32 {
+    guard let path = path, let outSR = outSR else {
+        return MM_ERR_INVALID_INPUT
+    }
+    do {
+        let sr = try AudioIO.getSampleRate(path: String(cString: path))
+        outSR.pointee = Int32(sr)
+        return MM_OK
+    } catch {
+        return MM_ERR_INVALID_INPUT
+    }
+}
+
 // MARK: - Audio Loading
 
 @_cdecl("mm_load")

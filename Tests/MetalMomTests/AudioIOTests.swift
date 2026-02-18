@@ -117,4 +117,44 @@ final class AudioIOTests: XCTestCase {
         // All samples should be 0.5
         XCTAssertEqual(signal[0], 0.5, accuracy: 0.01)
     }
+
+    // MARK: - Duration & Sample Rate
+
+    func testGetDuration() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent("test_dur_\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        let sampleRate = 22050
+        let numSamples = 22050 * 2  // 2 seconds
+        let samples = [Float](repeating: 0.5, count: numSamples)
+
+        try writeWAV(url: tempFile, samples: samples, sampleRate: sampleRate)
+
+        let duration = try AudioIO.getDuration(path: tempFile.path)
+        XCTAssertEqual(duration, 2.0, accuracy: 0.01)
+    }
+
+    func testGetSampleRate() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent("test_sr_\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        let sampleRate = 44100
+        let numSamples = 44100
+        let samples = [Float](repeating: 0.5, count: numSamples)
+
+        try writeWAV(url: tempFile, samples: samples, sampleRate: sampleRate)
+
+        let sr = try AudioIO.getSampleRate(path: tempFile.path)
+        XCTAssertEqual(sr, 44100)
+    }
+
+    func testGetDurationNonExistent() {
+        XCTAssertThrowsError(try AudioIO.getDuration(path: "/nonexistent.wav"))
+    }
+
+    func testGetSampleRateNonExistent() {
+        XCTAssertThrowsError(try AudioIO.getSampleRate(path: "/nonexistent.wav"))
+    }
 }

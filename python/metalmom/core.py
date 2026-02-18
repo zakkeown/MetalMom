@@ -58,6 +58,60 @@ def load(path, sr=22050, mono=True, offset=0.0, duration=None, **kwargs):
         lib.mm_destroy(ctx)
 
 
+def get_duration(path, **kwargs):
+    """Get the duration of an audio file in seconds.
+
+    Parameters
+    ----------
+    path : str
+        Path to the audio file.
+
+    Returns
+    -------
+    float
+        Duration in seconds.
+    """
+    path_bytes = path.encode('utf-8')
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+    try:
+        out_dur = ffi.new("float*")
+        status = lib.mm_get_duration(ctx, path_bytes, out_dur)
+        if status != 0:
+            raise RuntimeError(f"mm_get_duration failed with status {status}")
+        return float(out_dur[0])
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def get_samplerate(path, **kwargs):
+    """Get the sample rate of an audio file in Hz.
+
+    Parameters
+    ----------
+    path : str
+        Path to the audio file.
+
+    Returns
+    -------
+    int
+        Sample rate in Hz.
+    """
+    path_bytes = path.encode('utf-8')
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+    try:
+        out_sr = ffi.new("int32_t*")
+        status = lib.mm_get_sample_rate(ctx, path_bytes, out_sr)
+        if status != 0:
+            raise RuntimeError(f"mm_get_sample_rate failed with status {status}")
+        return int(out_sr[0])
+    finally:
+        lib.mm_destroy(ctx)
+
+
 def resample(y, orig_sr, target_sr, **kwargs):
     """Resample audio from one sample rate to another.
 

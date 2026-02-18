@@ -89,6 +89,20 @@ public enum AudioIO {
         return Signal(data: samples, sampleRate: outputSR)
     }
 
+    /// Get the duration of an audio file in seconds.
+    public static func getDuration(path: String) throws -> Double {
+        let url = URL(fileURLWithPath: path)
+        let file = try AVAudioFile(forReading: url)
+        return Double(file.length) / file.processingFormat.sampleRate
+    }
+
+    /// Get the sample rate of an audio file in Hz.
+    public static func getSampleRate(path: String) throws -> Int {
+        let url = URL(fileURLWithPath: path)
+        let file = try AVAudioFile(forReading: url)
+        return Int(file.processingFormat.sampleRate)
+    }
+
     /// Simple resampling using linear interpolation.
     private static func resample(_ input: [Float], fromRate: Int, toRate: Int) -> [Float] {
         guard fromRate != toRate, !input.isEmpty else { return input }

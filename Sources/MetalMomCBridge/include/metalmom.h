@@ -120,6 +120,10 @@ int32_t mm_poly_features(mm_context ctx, const float* data, int64_t count,
                           int32_t order, int32_t sr, int32_t n_fft,
                           MMBuffer* out);
 
+/* Audio Info */
+int32_t mm_get_duration(mm_context ctx, const char* path, float* out_duration);
+int32_t mm_get_sample_rate(mm_context ctx, const char* path, int32_t* out_sr);
+
 /* Audio Loading */
 int32_t mm_load(mm_context ctx, const char* path, int32_t sr,
                 int32_t mono, float offset, float duration,

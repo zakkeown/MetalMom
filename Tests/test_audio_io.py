@@ -71,3 +71,35 @@ def test_load_with_duration():
 def test_load_nonexistent():
     with pytest.raises(RuntimeError):
         metalmom.load("/nonexistent/file.wav")
+
+
+def test_get_duration():
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        path = f.name
+    try:
+        _create_test_wav(path, sr=22050, duration=2.0)
+        dur = metalmom.get_duration(path)
+        assert abs(dur - 2.0) < 0.01
+    finally:
+        os.unlink(path)
+
+
+def test_get_samplerate():
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        path = f.name
+    try:
+        _create_test_wav(path, sr=44100, duration=1.0)
+        sr = metalmom.get_samplerate(path)
+        assert sr == 44100
+    finally:
+        os.unlink(path)
+
+
+def test_get_duration_nonexistent():
+    with pytest.raises(RuntimeError):
+        metalmom.get_duration("/nonexistent.wav")
+
+
+def test_get_samplerate_nonexistent():
+    with pytest.raises(RuntimeError):
+        metalmom.get_samplerate("/nonexistent.wav")
