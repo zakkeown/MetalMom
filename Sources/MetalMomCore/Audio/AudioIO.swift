@@ -47,48 +47,88 @@ public enum AudioIO {
         // Seek to start position
         file.framePosition = startFrame
 
-        // Read into buffer
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: fileFormat, frameCapacity: framesToRead) else {
-            throw AudioIOError.allocationFailed
-        }
-        try file.read(into: buffer, frameCount: framesToRead)
-
-        let frameCount = Int(buffer.frameLength)
-        guard frameCount > 0 else {
-            return Signal(data: [], sampleRate: sr ?? fileSampleRate)
-        }
-
-        // Extract float data
-        guard let floatChannelData = buffer.floatChannelData else {
-            throw AudioIOError.unsupportedFormat
-        }
-
-        var samples: [Float]
-        if mono && channelCount > 1 {
-            // Mix to mono: average all channels
-            samples = [Float](repeating: 0, count: frameCount)
-            let scale = 1.0 / Float(channelCount)
-            for ch in 0..<channelCount {
-                let channelPtr = floatChannelData[ch]
-                for i in 0..<frameCount {
-                    samples[i] += channelPtr[i] * scale
-                }
-            }
-        } else if channelCount == 1 {
-            // Already mono
-            samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameCount))
-        } else {
-            // Multi-channel: return first channel when mono=false
-            samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameCount))
-        }
-
-        // Resample if needed
         let outputSR = sr ?? fileSampleRate
-        if outputSR != fileSampleRate {
-            samples = resample(samples, fromRate: fileSampleRate, toRate: outputSR)
-        }
+        let outputChannels: AVAudioChannelCount = (mono && channelCount > 1) ? 1 : AVAudioChannelCount(channelCount)
+        let needsConversion = outputSR != fileSampleRate || outputChannels != channelCount
 
-        return Signal(data: samples, sampleRate: outputSR)
+        if needsConversion {
+            // Use AVAudioConverter for hardware-accelerated format conversion
+            // (handles both sample rate conversion and channel downmix in one pass)
+            guard let outputFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: Double(outputSR),
+                channels: outputChannels,
+                interleaved: false
+            ) else {
+                throw AudioIOError.unsupportedFormat
+            }
+
+            // Read source audio at native format
+            guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: fileFormat, frameCapacity: framesToRead) else {
+                throw AudioIOError.allocationFailed
+            }
+            try file.read(into: inputBuffer, frameCount: framesToRead)
+
+            guard inputBuffer.frameLength > 0 else {
+                return Signal(data: [], sampleRate: outputSR)
+            }
+
+            // Create converter
+            guard let converter = AVAudioConverter(from: fileFormat, to: outputFormat) else {
+                throw AudioIOError.unsupportedFormat
+            }
+
+            // Estimate output frame count
+            let ratio = Double(outputSR) / fileFormat.sampleRate
+            let estimatedOutputFrames = AVAudioFrameCount(Double(inputBuffer.frameLength) * ratio) + 1
+            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: estimatedOutputFrames) else {
+                throw AudioIOError.allocationFailed
+            }
+
+            // Convert in a single hardware-accelerated pass
+            var error: NSError?
+            var isDone = false
+            let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+                if isDone {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                isDone = true
+                outStatus.pointee = .haveData
+                return inputBuffer
+            }
+
+            if status == .error, let error = error {
+                throw error
+            }
+
+            let frameCount = Int(outputBuffer.frameLength)
+            guard frameCount > 0, let floatData = outputBuffer.floatChannelData else {
+                return Signal(data: [], sampleRate: outputSR)
+            }
+
+            // For mono output or single channel, just copy channel 0
+            let samples = Array(UnsafeBufferPointer(start: floatData[0], count: frameCount))
+            return Signal(data: samples, sampleRate: outputSR)
+        } else {
+            // No conversion needed — read directly
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: fileFormat, frameCapacity: framesToRead) else {
+                throw AudioIOError.allocationFailed
+            }
+            try file.read(into: buffer, frameCount: framesToRead)
+
+            let frameCount = Int(buffer.frameLength)
+            guard frameCount > 0 else {
+                return Signal(data: [], sampleRate: fileSampleRate)
+            }
+
+            guard let floatChannelData = buffer.floatChannelData else {
+                throw AudioIOError.unsupportedFormat
+            }
+
+            let samples = Array(UnsafeBufferPointer(start: floatChannelData[0], count: frameCount))
+            return Signal(data: samples, sampleRate: fileSampleRate)
+        }
     }
 
     /// Get the duration of an audio file in seconds.
@@ -103,32 +143,6 @@ public enum AudioIO {
         let url = URL(fileURLWithPath: path)
         let file = try AVAudioFile(forReading: url)
         return Int(file.processingFormat.sampleRate)
-    }
-
-    /// Simple resampling using linear interpolation.
-    private static func resample(_ input: [Float], fromRate: Int, toRate: Int) -> [Float] {
-        guard fromRate != toRate, !input.isEmpty else { return input }
-
-        let ratio = Double(toRate) / Double(fromRate)
-        let outputLength = Int(Double(input.count) * ratio)
-        guard outputLength > 0 else { return [] }
-
-        var output = [Float](repeating: 0, count: outputLength)
-
-        // Linear interpolation resampling
-        for i in 0..<outputLength {
-            let srcPos = Double(i) / ratio
-            let srcIdx = Int(srcPos)
-            let frac = Float(srcPos - Double(srcIdx))
-
-            if srcIdx + 1 < input.count {
-                output[i] = input[srcIdx] * (1 - frac) + input[srcIdx + 1] * frac
-            } else if srcIdx < input.count {
-                output[i] = input[srcIdx]
-            }
-        }
-
-        return output
     }
 }
 
