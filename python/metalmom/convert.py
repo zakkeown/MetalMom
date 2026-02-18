@@ -40,7 +40,7 @@ def hz_to_midi(hz):
         if rc != 0:
             raise RuntimeError(f"mm_hz_to_midi failed with code {rc}")
         result = buffer_to_numpy(out)
-        return float(result) if hz.ndim == 0 else result
+        return result.item() if hz.ndim == 0 else result
     finally:
         lib.mm_destroy(ctx)
 
@@ -69,7 +69,7 @@ def midi_to_hz(midi):
         if rc != 0:
             raise RuntimeError(f"mm_midi_to_hz failed with code {rc}")
         result = buffer_to_numpy(out)
-        return float(result) if midi.ndim == 0 else result
+        return result.item() if midi.ndim == 0 else result
     finally:
         lib.mm_destroy(ctx)
 

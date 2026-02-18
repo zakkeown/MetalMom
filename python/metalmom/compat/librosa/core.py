@@ -385,7 +385,7 @@ def hz_to_mel(frequencies, htk=False, **kwargs):
         min_log_mel + np.log(frequencies / min_log_hz) / logstep,
     )
     scalar = frequencies.ndim == 0
-    return float(result) if scalar else result.astype(np.float32)
+    return result.item() if scalar else result.astype(np.float32)
 
 
 def mel_to_hz(mels, htk=False, **kwargs):
@@ -420,7 +420,7 @@ def mel_to_hz(mels, htk=False, **kwargs):
         min_log_hz * np.exp(logstep * (mels - min_log_mel)),
     )
     scalar = mels.ndim == 0
-    return float(result) if scalar else result.astype(np.float32)
+    return result.item() if scalar else result.astype(np.float32)
 
 
 def hz_to_octs(frequencies, tuning=0.0, bins_per_octave=12, **kwargs):
@@ -444,7 +444,7 @@ def hz_to_octs(frequencies, tuning=0.0, bins_per_octave=12, **kwargs):
     A440 = 440.0 * 2.0 ** (tuning / bins_per_octave)
     result = np.log2(frequencies / (A440 / 16.0))
     scalar = frequencies.ndim == 0
-    return float(result) if scalar else result.astype(np.float32)
+    return result.item() if scalar else result.astype(np.float32)
 
 
 def octs_to_hz(octs, tuning=0.0, bins_per_octave=12, **kwargs):
@@ -468,7 +468,7 @@ def octs_to_hz(octs, tuning=0.0, bins_per_octave=12, **kwargs):
     A440 = 440.0 * 2.0 ** (tuning / bins_per_octave)
     result = (A440 / 16.0) * 2.0 ** octs
     scalar = octs.ndim == 0
-    return float(result) if scalar else result.astype(np.float32)
+    return result.item() if scalar else result.astype(np.float32)
 
 
 def salience(S, freqs, harmonics, weights=None, aggregate=None,
