@@ -1188,6 +1188,115 @@ public func mm_onset_evaluate(
     return MM_OK
 }
 
+// MARK: - Beat Evaluation
+
+@_cdecl("mm_beat_evaluate")
+public func mm_beat_evaluate(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ reference: UnsafePointer<Float>?,
+    _ nRef: Int32,
+    _ estimated: UnsafePointer<Float>?,
+    _ nEst: Int32,
+    _ fmeasureWindow: Float,
+    _ outFMeasure: UnsafeMutablePointer<Float>?,
+    _ outCemgil: UnsafeMutablePointer<Float>?,
+    _ outPScore: UnsafeMutablePointer<Float>?,
+    _ outCmlC: UnsafeMutablePointer<Float>?,
+    _ outCmlT: UnsafeMutablePointer<Float>?,
+    _ outAmlC: UnsafeMutablePointer<Float>?,
+    _ outAmlT: UnsafeMutablePointer<Float>?
+) -> Int32 {
+    guard let outFMeasure = outFMeasure,
+          let outCemgil = outCemgil,
+          let outPScore = outPScore,
+          let outCmlC = outCmlC,
+          let outCmlT = outCmlT,
+          let outAmlC = outAmlC,
+          let outAmlT = outAmlT else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let refArray: [Float]
+    if let r = reference, nRef > 0 {
+        refArray = Array(UnsafeBufferPointer(start: r, count: Int(nRef)))
+    } else {
+        refArray = []
+    }
+
+    let estArray: [Float]
+    if let e = estimated, nEst > 0 {
+        estArray = Array(UnsafeBufferPointer(start: e, count: Int(nEst)))
+    } else {
+        estArray = []
+    }
+
+    let result = BeatEval.evaluate(reference: refArray, estimated: estArray,
+                                   fMeasureWindow: fmeasureWindow)
+    outFMeasure.pointee = result.fMeasure
+    outCemgil.pointee = result.cemgil
+    outPScore.pointee = result.pScore
+    outCmlC.pointee = result.cmlC
+    outCmlT.pointee = result.cmlT
+    outAmlC.pointee = result.amlC
+    outAmlT.pointee = result.amlT
+
+    return MM_OK
+}
+
+// MARK: - Tempo Evaluation
+
+@_cdecl("mm_tempo_evaluate")
+public func mm_tempo_evaluate(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ refTempo: Float,
+    _ estTempo: Float,
+    _ tolerance: Float,
+    _ outPScore: UnsafeMutablePointer<Float>?
+) -> Int32 {
+    guard let outPScore = outPScore else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let tol = tolerance > 0 ? tolerance : 0.08
+    outPScore.pointee = TempoEval.pScore(referenceTempo: refTempo, estimatedTempo: estTempo,
+                                         tolerance: tol)
+
+    return MM_OK
+}
+
+// MARK: - Chord Evaluation
+
+@_cdecl("mm_chord_accuracy")
+public func mm_chord_accuracy(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ reference: UnsafePointer<Int32>?,
+    _ estimated: UnsafePointer<Int32>?,
+    _ n: Int32,
+    _ outAccuracy: UnsafeMutablePointer<Float>?
+) -> Int32 {
+    guard let outAccuracy = outAccuracy else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let refArray: [Int32]
+    if let r = reference, n > 0 {
+        refArray = Array(UnsafeBufferPointer(start: r, count: Int(n)))
+    } else {
+        refArray = []
+    }
+
+    let estArray: [Int32]
+    if let e = estimated, n > 0 {
+        estArray = Array(UnsafeBufferPointer(start: e, count: Int(n)))
+    } else {
+        estArray = []
+    }
+
+    outAccuracy.pointee = ChordEval.accuracy(reference: refArray, estimated: estArray)
+
+    return MM_OK
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

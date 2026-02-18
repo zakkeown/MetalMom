@@ -153,6 +153,22 @@ ffi.cdef("""
                               float window,
                               float* out_precision, float* out_recall, float* out_fmeasure);
 
+    /* Beat Evaluation */
+    int32_t mm_beat_evaluate(mm_context ctx,
+                             const float* reference, int32_t n_ref,
+                             const float* estimated, int32_t n_est,
+                             float fmeasure_window,
+                             float* out_fmeasure, float* out_cemgil, float* out_pscore,
+                             float* out_cmlc, float* out_cmlt, float* out_amlc, float* out_amlt);
+
+    /* Tempo Evaluation */
+    int32_t mm_tempo_evaluate(mm_context ctx, float ref_tempo, float est_tempo,
+                              float tolerance, float* out_pscore);
+
+    /* Chord Evaluation */
+    int32_t mm_chord_accuracy(mm_context ctx, const int32_t* reference, const int32_t* estimated,
+                              int32_t n, float* out_accuracy);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)
