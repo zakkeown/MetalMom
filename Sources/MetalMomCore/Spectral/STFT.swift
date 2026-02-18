@@ -231,6 +231,8 @@ public struct STFT: ComputeOperation {
         winLength: Int? = nil,
         center: Bool = true
     ) -> Signal {
+        let state = Profiler.shared.begin("STFT.power")
+        defer { Profiler.shared.end("STFT.power", state) }
         let hop = hopLength ?? (nFFT / 4)
         let win = winLength ?? nFFT
         let nFreqs = nFFT / 2 + 1
@@ -495,6 +497,8 @@ extension STFT {
         winLength: Int? = nil,
         center: Bool = true
     ) -> Signal {
+        let state = Profiler.shared.begin("STFT")
+        defer { Profiler.shared.end("STFT", state) }
         let hop = hopLength ?? nFFT / 4
         let win = winLength ?? nFFT
         let input = STFTInput(signal: signal, nFFT: nFFT, hopLength: hop, winLength: win, center: center)

@@ -38,6 +38,8 @@ public enum FusedMFCC {
         fMin: Float = 0.0,
         fMax: Float? = nil
     ) -> Signal {
+        let state = Profiler.shared.begin("MFCC")
+        defer { Profiler.shared.end("MFCC", state) }
         let sampleRate = sr ?? signal.sampleRate
         let hop = hopLength ?? (nFFT / 4)
         let win = winLength ?? nFFT
@@ -73,6 +75,8 @@ public enum FusedMFCC {
         winLength: Int, center: Bool, nMels: Int, nMFCC: Int,
         fMin: Float, fMax: Float
     ) -> Signal? {
+        let state = Profiler.shared.begin("MFCC.GPU")
+        defer { Profiler.shared.end("MFCC.GPU", state) }
         guard let backend = MetalBackend.shared else { return nil }
         let device = backend.device
         let nFreqs = nFFT / 2 + 1

@@ -32,6 +32,8 @@ public enum OnsetDetection {
         aggregate: Bool = true,
         lag: Int = 1
     ) -> Signal {
+        let state = Profiler.shared.begin("OnsetStrength")
+        defer { Profiler.shared.end("OnsetStrength", state) }
         let sampleRate = sr ?? signal.sampleRate
         let hop = hopLength ?? 512
 

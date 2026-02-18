@@ -38,6 +38,8 @@ public enum Chroma {
         norm: Float? = nil,
         tuning: Float = 0.0
     ) -> Signal {
+        let state = Profiler.shared.begin("Chroma")
+        defer { Profiler.shared.end("Chroma", state) }
         let sampleRate = sr ?? signal.sampleRate
 
         // 1. Compute STFT magnitude spectrogram: shape [nFreqs, nFrames]

@@ -20,6 +20,8 @@ public enum AudioIO {
         offset: Double = 0.0,
         duration: Double? = nil
     ) throws -> Signal {
+        let state = Profiler.shared.begin("AudioIO.load")
+        defer { Profiler.shared.end("AudioIO.load", state) }
         let url = URL(fileURLWithPath: path)
         let file = try AVAudioFile(forReading: url)
 

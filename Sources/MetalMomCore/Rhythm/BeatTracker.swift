@@ -33,6 +33,8 @@ public enum BeatTracker {
         trimFirst: Bool = true,
         trimLast: Bool = true
     ) -> (tempo: Float, beats: Signal) {
+        let state = Profiler.shared.begin("BeatTrack")
+        defer { Profiler.shared.end("BeatTrack", state) }
         let sampleRate = sr ?? signal.sampleRate
         let hop = hopLength ?? 512
 

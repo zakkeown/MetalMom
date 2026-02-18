@@ -37,6 +37,8 @@ public enum MelSpectrogram {
         fMin: Float = 0.0,
         fMax: Float? = nil
     ) -> Signal {
+        let state = Profiler.shared.begin("MelSpectrogram")
+        defer { Profiler.shared.end("MelSpectrogram", state) }
         let sampleRate = sr ?? signal.sampleRate
 
         // 1. Compute spectrogram with the requested power.
