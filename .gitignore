@@ -25,3 +25,6 @@ python/metalmom/_lib/
 
 # Benchmark results (machine-specific, regenerated)
 benchmarks/results/bench_*.json
+
+# Sphinx build output
+docs/api/_build/
