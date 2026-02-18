@@ -57,9 +57,10 @@ final class ReassignedSpectrogramTests: XCTestCase {
         XCTAssertEqual(mag.shape, stftMag.shape,
                        "Reassigned magnitude shape should match STFT magnitude shape")
 
-        // Same values (they use the same Hann window and FFT)
+        // Same values (they use the same Hann window and FFT).
+        // Tolerance accommodates vDSP (CPU) vs MPSGraph (GPU) FFT precision differences.
         for i in 0..<min(mag.count, stftMag.count) {
-            XCTAssertEqual(mag[i], stftMag[i], accuracy: 1e-4,
+            XCTAssertEqual(mag[i], stftMag[i], accuracy: 1e-2,
                           "Magnitude at index \(i) should match STFT")
         }
     }

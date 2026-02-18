@@ -1,13 +1,19 @@
 import Foundation
 
 /// Routes compute operations to the optimal backend based on data size.
-/// During Phases 1-9, always routes to Accelerate (CPU).
+/// Prefers Metal when available; falls back to Accelerate (CPU).
 public final class SmartDispatcher {
     public let activeBackend: BackendType
+    public let metalBackend: MetalBackend?
 
     public init() {
-        // Phase 10 will add Metal availability check here
-        self.activeBackend = .accelerate
+        if let metal = MetalBackend.shared {
+            self.metalBackend = metal
+            self.activeBackend = .metal
+        } else {
+            self.metalBackend = nil
+            self.activeBackend = .accelerate
+        }
     }
 
     /// Determine which backend to use for a given data size and operation threshold.

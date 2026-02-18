@@ -89,6 +89,32 @@ public enum MelSpectrogram {
         )
 
         // 4. Matrix multiply: melFB [nMels, nFreqs] @ powered [nFreqs, nFrames] = [nMels, nFrames]
+        //
+        // Use GPU (MPS) when Metal is available and the workload is large enough
+        // to amortise data-transfer overhead.  Falls through to CPU on failure.
+        let matmulSize = nMels * nFreqs * nFrames
+        let useGPU = MetalBackend.shared != nil
+            && matmulSize > (MetalBackend.shared?.chipProfile.threshold(for: .matmul) ?? Int.max)
+
+        if useGPU {
+            let melWeights: [Float] = melFB.withUnsafeBufferPointer { Array($0) }
+            let poweredArray = Array(UnsafeBufferPointer(start: poweredPtr, count: stftCount))
+
+            if let gpuResult = MetalMatmul.multiply(
+                a: melWeights, aRows: nMels, aCols: nFreqs,
+                b: poweredArray, bRows: nFreqs, bCols: nFrames
+            ) {
+                let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: gpuResult.count)
+                gpuResult.withUnsafeBufferPointer { src in
+                    outPtr.initialize(from: src.baseAddress!, count: gpuResult.count)
+                }
+                let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: gpuResult.count)
+                return Signal(taking: outBuffer, shape: [nMels, nFrames], sampleRate: sampleRate)
+            }
+            // GPU path failed — fall through to CPU path below.
+        }
+
+        // CPU path: vDSP matrix multiply (Accelerate).
         let outCount = nMels * nFrames
         let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: outCount)
         outPtr.initialize(repeating: 0, count: outCount)

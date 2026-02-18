@@ -76,7 +76,8 @@ final class ComplexSTFTTests: XCTestCase {
                 let imag = complexResult.imagPart(at: idx)
                 let mag = sqrtf(real * real + imag * imag)
                 let expected = magResult[idx]
-                XCTAssertEqual(mag, expected, accuracy: 1e-5,
+                // Tolerance allows for vDSP (CPU) vs MPSGraph (GPU) FFT precision differences
+                XCTAssertEqual(mag, expected, accuracy: 1e-3,
                     "Magnitude mismatch at freq=\(freq) frame=\(frame): computed=\(mag) expected=\(expected)")
             }
         }

@@ -1,5 +1,7 @@
 import Foundation
 import Accelerate
+import Metal
+import MetalPerformanceShadersGraph
 
 // MARK: - Input / Output Types
 
@@ -33,8 +35,10 @@ public struct STFT: ComputeOperation {
     public typealias Input = STFTInput
     public typealias Output = STFTOutput
 
-    /// CPU-only until Phase 10.
-    public static var dispatchThreshold: Int { Int.max }
+    /// Minimum data size to prefer GPU over CPU. Uses ChipProfile when Metal is available.
+    public static var dispatchThreshold: Int {
+        MetalBackend.shared?.chipProfile.threshold(for: .stft) ?? Int.max
+    }
 
     public init() {}
 
@@ -183,6 +187,162 @@ public struct STFT: ComputeOperation {
         tempPtr.deallocate()
 
         let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: totalElements)
+        let output = Signal(taking: outBuffer, shape: [nFreqs, nFrames],
+                            sampleRate: input.signal.sampleRate)
+        return STFTOutput(magnitude: output)
+    }
+}
+
+// MARK: - GPU Path (MPSGraph)
+
+extension STFT {
+    /// GPU-accelerated STFT using MPSGraph for batched real FFT + magnitude.
+    ///
+    /// The approach:
+    /// 1. Prepare frames on CPU (padding, windowing, framing — memory-bound, not worth GPU dispatch)
+    /// 2. Use MPSGraph `realToHermiteanFFT` for batched FFT on all frames at once
+    /// 3. Compute magnitudes via MPSGraph ops: sqrt(real^2 + imag^2)
+    /// 4. Transpose [nFrames, nFreqs] -> [nFreqs, nFrames] on GPU
+    /// 5. Read results back to CPU
+    public func executeGPU(_ input: STFTInput) -> STFTOutput {
+        guard let metalBackend = MetalBackend.shared else {
+            // Fallback to CPU if Metal unavailable
+            return executeCPU(input)
+        }
+
+        let nFFT = input.nFFT
+        let hopLength = input.hopLength
+        let winLength = input.winLength
+        let nFreqs = nFFT / 2 + 1
+
+        // --- 1. Optionally pad the signal ---
+        let padded: [Float]
+        if input.center {
+            let padAmount = nFFT / 2
+            padded = [Float](repeating: 0, count: padAmount)
+                   + input.signal.withUnsafeBufferPointer { Array($0) }
+                   + [Float](repeating: 0, count: padAmount)
+        } else {
+            padded = input.signal.withUnsafeBufferPointer { Array($0) }
+        }
+
+        let paddedLength = padded.count
+
+        // --- 2. Compute number of frames ---
+        guard paddedLength >= nFFT else {
+            let out = Signal(data: [], shape: [nFreqs, 0], sampleRate: input.signal.sampleRate)
+            return STFTOutput(magnitude: out)
+        }
+        let nFrames = 1 + (paddedLength - nFFT) / hopLength
+
+        // --- 3. Prepare window ---
+        let window = Windows.hann(length: winLength, periodic: true)
+        let fullWindow: [Float]
+        if winLength < nFFT {
+            let padBefore = (nFFT - winLength) / 2
+            let padAfter = nFFT - winLength - padBefore
+            fullWindow = [Float](repeating: 0, count: padBefore)
+                       + window
+                       + [Float](repeating: 0, count: padAfter)
+        } else {
+            fullWindow = window
+        }
+
+        // --- 4. Frame + window on CPU -> [nFrames, nFFT] ---
+        var framedData = [Float](repeating: 0, count: nFrames * nFFT)
+        padded.withUnsafeBufferPointer { paddedBuf in
+            fullWindow.withUnsafeBufferPointer { winBuf in
+                framedData.withUnsafeMutableBufferPointer { outBuf in
+                    for frame in 0..<nFrames {
+                        let srcStart = frame * hopLength
+                        let dstStart = frame * nFFT
+                        vDSP_vmul(
+                            paddedBuf.baseAddress! + srcStart, 1,
+                            winBuf.baseAddress!, 1,
+                            outBuf.baseAddress! + dstStart, 1,
+                            vDSP_Length(nFFT)
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- 5. Build MPSGraph for batched real FFT + magnitude ---
+        let graph = MPSGraph()
+
+        // Input placeholder: [nFrames, nFFT] real float32
+        let inputTensor = graph.placeholder(
+            shape: [nFrames as NSNumber, nFFT as NSNumber],
+            dataType: .float32,
+            name: "input_frames"
+        )
+
+        // FFT descriptor: forward transform, no scaling (matches vDSP after our manual normalization)
+        let fftDescriptor = MPSGraphFFTDescriptor()
+        fftDescriptor.inverse = false
+        fftDescriptor.scalingMode = .none
+
+        // Real-to-Hermitean FFT along axis 1 (the nFFT dimension).
+        // Input:  [nFrames, nFFT] float32
+        // Output: [nFrames, nFFT/2+1] complexFloat32
+        let fftResult = graph.realToHermiteanFFT(
+            inputTensor,
+            axes: [1],
+            descriptor: fftDescriptor,
+            name: "fft"
+        )
+
+        // Extract real and imaginary parts: each [nFrames, nFreqs] float32
+        let realPart = graph.realPartOfTensor(tensor: fftResult, name: "real")
+        let imagPart = graph.imaginaryPartOfTensor(tensor: fftResult, name: "imag")
+
+        // Magnitude: sqrt(real^2 + imag^2)
+        let realSq = graph.multiplication(realPart, realPart, name: "real_sq")
+        let imagSq = graph.multiplication(imagPart, imagPart, name: "imag_sq")
+        let sumSq = graph.addition(realSq, imagSq, name: "sum_sq")
+        let magnitude = graph.squareRoot(with: sumSq, name: "magnitude")
+
+        // Transpose [nFrames, nFreqs] -> [nFreqs, nFrames]
+        let transposed = graph.transposeTensor(magnitude, dimension: 0, withDimension: 1, name: "transposed")
+
+        // --- 6. Create input MTLBuffer and MPSGraphTensorData ---
+        let inputByteCount = framedData.count * MemoryLayout<Float>.stride
+        guard let inputBuffer = framedData.withUnsafeBufferPointer({ buf in
+            metalBackend.device.makeBuffer(
+                bytes: buf.baseAddress!,
+                length: inputByteCount,
+                options: .storageModeShared
+            )
+        }) else {
+            // Metal buffer allocation failed — fall back to CPU
+            return executeCPU(input)
+        }
+
+        let inputMPSData = MPSGraphTensorData(
+            inputBuffer,
+            shape: [nFrames as NSNumber, nFFT as NSNumber],
+            dataType: .float32
+        )
+
+        // --- 7. Execute graph ---
+        let results = graph.run(
+            with: metalBackend.commandQueue,
+            feeds: [inputTensor: inputMPSData],
+            targetTensors: [transposed],
+            targetOperations: nil
+        )
+
+        // --- 8. Read results back ---
+        guard let outputMPSData = results[transposed] else {
+            // Unexpected missing result — fall back to CPU
+            return executeCPU(input)
+        }
+
+        let outputCount = nFreqs * nFrames
+        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: outputCount)
+        outputMPSData.mpsndarray().readBytes(outPtr, strideBytes: nil)
+
+        let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: outputCount)
         let output = Signal(taking: outBuffer, shape: [nFreqs, nFrames],
                             sampleRate: input.signal.sampleRate)
         return STFTOutput(magnitude: output)

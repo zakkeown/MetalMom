@@ -18,7 +18,8 @@ let package = Package(
         .target(
             name: "MetalMomCore",
             dependencies: ["MetalMomCBridge"],
-            path: "Sources/MetalMomCore"
+            path: "Sources/MetalMomCore",
+            exclude: ["Shaders"]
         ),
         .target(
             name: "MetalMomBridge",
