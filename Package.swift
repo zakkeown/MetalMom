@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "MetalMomCore", targets: ["MetalMomCore"]),
         .library(name: "MetalMomBridge", type: .dynamic, targets: ["MetalMomBridge"]),
+        .library(name: "MetalMomBridgeStatic", type: .static, targets: ["MetalMomBridge"]),
     ],
     targets: [
         .target(
