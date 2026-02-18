@@ -408,21 +408,18 @@ class TestLibrosaFiltersPipeline:
 class TestLibrosaConvertPipeline:
     """Unit conversion functions."""
 
-    @pytest.mark.xfail(reason="mm_hz_to_midi C bridge symbol pending dylib rebuild")
     def test_hz_to_midi(self):
         from metalmom.compat import librosa
 
         midi = librosa.hz_to_midi(440.0)
         assert abs(float(midi) - 69.0) < 0.01
 
-    @pytest.mark.xfail(reason="mm_midi_to_hz C bridge symbol pending dylib rebuild")
     def test_midi_to_hz(self):
         from metalmom.compat import librosa
 
         hz = librosa.midi_to_hz(69)
         assert abs(float(hz) - 440.0) < 0.01
 
-    @pytest.mark.xfail(reason="mm_hz_to_midi/mm_midi_to_hz C bridge symbols pending dylib rebuild")
     def test_hz_midi_roundtrip(self):
         from metalmom.compat import librosa
 
@@ -455,7 +452,6 @@ class TestLibrosaConvertPipeline:
         hz = librosa.mel_to_hz(librosa.hz_to_mel(440.0))
         assert abs(float(hz) - 440.0) < 1.0
 
-    @pytest.mark.xfail(reason="mm_fft_frequencies C bridge symbol pending dylib rebuild")
     def test_fft_frequencies(self):
         from metalmom.compat import librosa
 
@@ -464,7 +460,6 @@ class TestLibrosaConvertPipeline:
         assert freqs[0] == 0.0
         np.testing.assert_allclose(freqs[-1], 22050 / 2.0, rtol=1e-3)
 
-    @pytest.mark.xfail(reason="mm_mel_frequencies C bridge symbol pending dylib rebuild")
     def test_mel_frequencies(self):
         from metalmom.compat import librosa
 
@@ -472,7 +467,6 @@ class TestLibrosaConvertPipeline:
         assert len(freqs) == 128
         assert freqs[0] >= 0.0
 
-    @pytest.mark.xfail(reason="mm_frames_to_time C bridge symbol pending dylib rebuild")
     def test_frames_to_time(self):
         from metalmom.compat import librosa
 
