@@ -159,32 +159,84 @@ public enum BeatTracker {
 
     // MARK: - Autocorrelation
 
-    /// Compute unnormalized autocorrelation of a signal using vDSP.
+    /// Compute unnormalized autocorrelation of a signal using FFT (O(n log n)).
+    ///
+    /// Zero-pads to next power-of-2 >= 2n, computes power spectrum via
+    /// forward FFT, then inverse FFT to obtain all lags in one pass.
     private static func autocorrelation(_ x: [Float]) -> [Float] {
         let n = x.count
         guard n > 0 else { return [] }
 
-        // Use vDSP_conv for autocorrelation
-        // For autocorrelation: convolve x with reversed x
-        // Result length = 2*n - 1, but we only need lags 0..<n
-        var result = [Float](repeating: 0, count: n)
+        // Pad to next power of 2 >= 2*n for linear (non-circular) autocorrelation
+        var fftSize = 1
+        while fftSize < 2 * n { fftSize <<= 1 }
+        let halfFFT = fftSize / 2
+        let log2n = vDSP_Length(log2(Double(fftSize)))
 
-        // Manual autocorrelation for each lag
-        // This is O(n^2) but n is typically small (hundreds of frames)
-        for lag in 0..<n {
-            var sum: Float = 0
-            let count = n - lag
-            // Use vDSP_dotpr for the inner product
-            x.withUnsafeBufferPointer { xBuf in
-                vDSP_dotpr(xBuf.baseAddress!, 1,
-                           xBuf.baseAddress!.advanced(by: lag), 1,
-                           &sum,
-                           vDSP_Length(count))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            return [Float](repeating: 0, count: n)
+        }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
+
+        // Zero-pad input
+        var padded = [Float](repeating: 0, count: fftSize)
+        for i in 0..<n { padded[i] = x[i] }
+
+        // Pack into split complex using stable pointers
+        let realPtr = UnsafeMutablePointer<Float>.allocate(capacity: halfFFT)
+        let imagPtr = UnsafeMutablePointer<Float>.allocate(capacity: halfFFT)
+        realPtr.initialize(repeating: 0, count: halfFFT)
+        imagPtr.initialize(repeating: 0, count: halfFFT)
+        defer {
+            realPtr.deallocate()
+            imagPtr.deallocate()
+        }
+        var splitComplex = DSPSplitComplex(realp: realPtr, imagp: imagPtr)
+
+        padded.withUnsafeBufferPointer { paddedBuf in
+            paddedBuf.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfFFT) { complexPtr in
+                vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfFFT))
             }
-            result[lag] = sum
         }
 
-        return result
+        // Forward FFT
+        vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(kFFTDirection_Forward))
+
+        // Compute power spectrum: real = real^2 + imag^2, imag = 0
+        // In the packed format, realp[0] = DC component, imagp[0] = Nyquist component
+        // (both are purely real). Save them before vDSP_zvmags overwrites bin 0.
+        let dcVal = splitComplex.realp[0]
+        let nyquistVal = splitComplex.imagp[0]
+
+        // Compute squared magnitudes for ALL bins (overwrites realp in-place)
+        vDSP_zvmags(&splitComplex, 1, splitComplex.realp, 1, vDSP_Length(halfFFT))
+
+        // Fix bin 0: DC and Nyquist are packed as (DC, Nyquist) not (real, imag),
+        // so their power is just the square of each, not real^2 + imag^2
+        splitComplex.realp[0] = dcVal * dcVal
+        splitComplex.imagp[0] = nyquistVal * nyquistVal
+
+        // Clear imaginary part for bins 1..<halfFFT
+        vDSP_vclr(splitComplex.imagp + 1, 1, vDSP_Length(halfFFT - 1))
+
+        // Inverse FFT
+        vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(kFFTDirection_Inverse))
+
+        // Unpack result
+        var result = [Float](repeating: 0, count: fftSize)
+        result.withUnsafeMutableBufferPointer { resBuf in
+            resBuf.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfFFT) { complexPtr in
+                vDSP_ztoc(&splitComplex, 1, complexPtr, 2, vDSP_Length(halfFFT))
+            }
+        }
+
+        // Normalize: vDSP forward*inverse scales by fftSize/2, and we want
+        // relative values only (estimateTempo uses peak-finding, not absolute magnitudes)
+        var scale = 1.0 / Float(fftSize * 2)
+        vDSP_vsmul(result, 1, &scale, &result, 1, vDSP_Length(fftSize))
+
+        // Return only the first n lags (0..<n)
+        return Array(result.prefix(n))
     }
 
     // MARK: - Predominant Local Pulse (PLP)
@@ -443,6 +495,13 @@ public enum BeatTracker {
         // Fill DP table
         let logPeriod = log(period)
 
+        // Precompute log table for intervals 1..<maxInterval to avoid per-iteration log() calls
+        let maxInterval = min(n, periodInt + window + 1)
+        var logTable = [Float](repeating: 0, count: maxInterval + 1)
+        for i in 1...maxInterval {
+            logTable[i] = log(Float(i))
+        }
+
         for t in 1..<n {
             // Search window for predecessors
             let searchLo = max(0, t - periodInt - window)
@@ -454,9 +513,9 @@ public enum BeatTracker {
             var bestVal: Float = -Float.infinity
 
             for tau in searchLo...searchHi {
-                let interval = Float(t - tau)
+                let interval = t - tau
                 guard interval > 0 else { continue }
-                let logInterval = log(interval)
+                let logInterval = interval <= maxInterval ? logTable[interval] : log(Float(interval))
                 let diff = logInterval - logPeriod
                 let penalty = -alpha * diff * diff
                 let val = score[tau] + penalty
