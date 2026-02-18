@@ -21,7 +21,7 @@ public enum KeyDetection {
     ]
 
     /// Result of key detection.
-    public struct KeyResult {
+    public struct KeyResult: Sendable {
         /// Detected key index (0-23).
         public let keyIndex: Int
         /// Key label string (e.g., "C major").

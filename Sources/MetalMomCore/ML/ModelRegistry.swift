@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Errors
 
 /// Errors that can occur when using the model registry.
-public enum ModelRegistryError: Error, Equatable {
+public enum ModelRegistryError: Error, Equatable, Sendable {
     /// The registry has not been configured with a models directory.
     case notConfigured
     /// No model with the given name was found in the models directory.
@@ -28,7 +28,7 @@ public enum ModelRegistryError: Error, Equatable {
 /// let names = registry.availableModels   // ["beat_rnn_0", "onset_cnn", ...]
 /// let engine = try registry.model(named: "beat_rnn_0")
 /// ```
-public final class ModelRegistry {
+public final class ModelRegistry: @unchecked Sendable {
     /// Shared singleton instance.
     public static let shared = ModelRegistry()
 
@@ -152,3 +152,25 @@ public final class ModelRegistry {
         cache.removeAll()
     }
 }
+
+// MARK: - iOS / visionOS convenience
+
+#if os(iOS) || os(visionOS)
+extension ModelRegistry {
+    /// Configure with default iOS model locations.
+    ///
+    /// Scans the app bundle's `MetalMom-Models` directory (for bundled core models)
+    /// and the `ModelDownloader` cache directory (for downloaded models).
+    public func configureDefaultiOS() {
+        // Check for bundled models in the app bundle
+        if let bundlePath = Bundle.main.path(forResource: "MetalMom-Models", ofType: nil) {
+            configure(modelsDirectory: URL(fileURLWithPath: bundlePath))
+        }
+        // Also check the download cache
+        let cacheDir = ModelDownloader.shared.cacheDirectory
+        if FileManager.default.fileExists(atPath: cacheDir.path) {
+            configure(modelsDirectory: cacheDir)
+        }
+    }
+}
+#endif

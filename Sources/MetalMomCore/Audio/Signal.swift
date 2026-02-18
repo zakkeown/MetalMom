@@ -2,7 +2,7 @@ import Accelerate
 import Foundation
 
 /// Distinguishes real-valued from complex-valued signal data.
-public enum SignalDType: Equatable {
+public enum SignalDType: Equatable, Sendable {
     case float32      // Real-valued: N floats
     case complex64    // Complex-valued: 2N floats (interleaved real, imag, real, imag, ...)
 }
@@ -10,7 +10,11 @@ public enum SignalDType: Equatable {
 /// Core data type wrapping audio data with shape metadata.
 /// Uses manually-allocated UnsafeMutableBufferPointer for stable pointer addresses
 /// safe to pass to Accelerate, Metal, and across the C ABI.
-public final class Signal {
+///
+/// - Important: Thread-safety contract — do not mutate a Signal while it is being read
+///   on another thread. Compute operations return new Signals and do not share mutable
+///   state, so this naturally holds in typical usage.
+public final class Signal: @unchecked Sendable {
     private let storage: UnsafeMutableBufferPointer<Float>
     public let shape: [Int]
     public let sampleRate: Int

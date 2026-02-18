@@ -37,3 +37,28 @@ jobs:
 
       - name: Run Python tests
         run: pytest Tests/ -v --tb=short
+
+  build-and-test-ios:
+    name: Build & Test (iOS Simulator)
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild build \
+            -scheme MetalMomCore \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -skipPackagePluginValidation
+
+      - name: Build static bridge for iOS Simulator
+        run: |
+          xcodebuild build \
+            -scheme MetalMomBridgeStatic \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -skipPackagePluginValidation

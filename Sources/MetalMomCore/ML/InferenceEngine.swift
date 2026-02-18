@@ -4,7 +4,7 @@ import Foundation
 // MARK: - Errors
 
 /// Errors that can occur during CoreML inference.
-public enum InferenceError: Error, Equatable {
+public enum InferenceError: Error, Equatable, Sendable {
     /// The requested output feature was not found in model predictions.
     case missingOutput(String)
     /// The model file could not be loaded or is invalid.
@@ -29,7 +29,7 @@ public enum InferenceError: Error, Equatable {
 ///
 /// Supports both pre-compiled `.mlmodelc` bundles and uncompiled `.mlmodel` /
 /// `.mlpackage` files (the latter are compiled on first load).
-public final class InferenceEngine {
+public final class InferenceEngine: @unchecked Sendable {
     private let model: MLModel
 
     /// The URL the model was loaded from (for diagnostics).

@@ -146,7 +146,7 @@ public enum AudioIO {
     }
 }
 
-public enum AudioIOError: Error, LocalizedError {
+public enum AudioIOError: Error, LocalizedError, Sendable {
     case allocationFailed
     case unsupportedFormat
     case fileNotFound(String)

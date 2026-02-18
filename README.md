@@ -48,6 +48,41 @@ pip install "metalmom[eval]"      # mir_eval for evaluation metrics
 pip install "metalmom[dev]"       # pytest + librosa for development
 ```
 
+## iOS / Swift Package Manager
+
+MetalMom's Swift engine works natively on iOS 17+. Add it to your Xcode project via SPM:
+
+```swift
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/zakkeown/MetalMom.git", from: "0.1.0")
+]
+
+// Target dependency
+.target(name: "MyApp", dependencies: [
+    .product(name: "MetalMomCore", package: "MetalMom"),
+])
+```
+
+Or for non-SPM projects, download the pre-built XCFramework from
+[GitHub Releases](https://github.com/zakkeown/MetalMom/releases).
+
+```swift
+import MetalMomCore
+
+// Load and analyze audio
+let signal = try AudioIO.load(path: audioURL.path, sr: 22050, mono: true)
+let mel = MelSpectrogram.compute(signal: signal, nFFT: 2048, hopLength: 512)
+let (tempo, beats) = BeatTracker.beatTrack(signal: signal, hopLength: 512)
+```
+
+**CoreML models:** Core models (beat/onset/downbeat) are bundled. Extended models
+are available from the [Hugging Face model repo](https://huggingface.co/zkeown/metalmom-coreml-models)
+and can be downloaded on-demand via `ModelDownloader`.
+
+**Threading:** All compute operations are `Sendable` and return new `Signal` instances.
+The C bridge layer (`MetalMomBridge`) uses one context per thread.
+
 ## Quick Start
 
 ```python

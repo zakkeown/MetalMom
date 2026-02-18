@@ -5,7 +5,7 @@ import Foundation
 // MARK: - Errors
 
 /// Errors specific to ensemble inference.
-public enum EnsembleError: Error, Equatable {
+public enum EnsembleError: Error, Equatable, Sendable {
     /// No engines were provided (ensemble must have at least 1 model).
     case emptyEnsemble
     /// Model outputs have mismatched shapes across the ensemble.
@@ -19,10 +19,10 @@ public enum EnsembleError: Error, Equatable {
 /// madmom uses ensembles of 6-8 identical-architecture models for beat, onset,
 /// and downbeat detection. Each model produces a probability sequence, and the
 /// ensemble output is the average across all models.
-public final class EnsembleRunner {
+public final class EnsembleRunner: @unchecked Sendable {
 
     /// Strategy for combining ensemble outputs.
-    public enum CombineStrategy {
+    public enum CombineStrategy: Sendable {
         /// Average all model outputs element-wise (default for beat/onset).
         case mean
         /// Take the median across models for each element.

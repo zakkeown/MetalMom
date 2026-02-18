@@ -3,7 +3,7 @@ import os
 
 /// Permanent instrumentation infrastructure using OSSignposter.
 /// Signposts have near-zero overhead when Instruments is not attached.
-public final class Profiler {
+public final class Profiler: @unchecked Sendable {
     public static let shared = Profiler()
 
     private let signposter: OSSignposter

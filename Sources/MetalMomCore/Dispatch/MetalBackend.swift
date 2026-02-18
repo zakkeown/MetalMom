@@ -3,7 +3,7 @@ import Metal
 
 /// Metal GPU backend.  Holds the device, command queue, and shader library.
 /// The singleton is `nil` when Metal is unavailable (e.g. Linux CI).
-public final class MetalBackend {
+public final class MetalBackend: @unchecked Sendable {
 
     /// Shared singleton — `nil` if Metal is unavailable.
     public static let shared: MetalBackend? = {
@@ -17,10 +17,13 @@ public final class MetalBackend {
 
     // Shader library, loaded on first access.
     private var _defaultLibrary: MTLLibrary?
+    private let libraryLock = NSLock()
 
     /// The default Metal shader library for this package.
     /// Returns `nil` until .metal shader files are added (Task 10.3+).
     public var defaultLibrary: MTLLibrary? {
+        libraryLock.lock()
+        defer { libraryLock.unlock() }
         if _defaultLibrary == nil {
             _defaultLibrary = device.makeDefaultLibrary()
         }
@@ -36,7 +39,19 @@ public final class MetalBackend {
 
     /// Shared MetalShaders instance — compiled on first access.
     /// Returns `nil` if shader compilation fails.
-    public lazy var shaders: MetalShaders? = MetalShaders(device: device)
+    private var _shaders: MetalShaders?
+    private var _shadersInitialized = false
+    private let shadersLock = NSLock()
+
+    public var shaders: MetalShaders? {
+        shadersLock.lock()
+        defer { shadersLock.unlock() }
+        if !_shadersInitialized {
+            _shaders = MetalShaders(device: device)
+            _shadersInitialized = true
+        }
+        return _shaders
+    }
 
     /// Create a command buffer for a batch of GPU operations.
     public func makeCommandBuffer() -> MTLCommandBuffer? {
