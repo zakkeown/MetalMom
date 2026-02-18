@@ -304,6 +304,15 @@ int32_t mm_neural_beat_decode(mm_context ctx,
                               int32_t trim,
                               float* out_tempo, MMBuffer* out_beats);
 
+/* Neural Onset Detect */
+int32_t mm_neural_onset_detect(mm_context ctx,
+                               const float* activations, int32_t n_frames,
+                               float fps, float threshold,
+                               int32_t pre_max, int32_t post_max,
+                               int32_t pre_avg, int32_t post_avg,
+                               int32_t combine_method, int32_t wait,
+                               MMBuffer* out);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

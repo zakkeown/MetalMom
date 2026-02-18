@@ -2228,6 +2228,56 @@ public func mm_neural_beat_decode(
     return fillBuffer(result, outBeats)
 }
 
+// MARK: - Neural Onset Detect
+
+@_cdecl("mm_neural_onset_detect")
+public func mm_neural_onset_detect(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ activations: UnsafePointer<Float>?,
+    _ nFrames: Int32,
+    _ fps: Float,
+    _ threshold: Float,
+    _ preMax: Int32,
+    _ postMax: Int32,
+    _ preAvg: Int32,
+    _ postAvg: Int32,
+    _ combineMethod: Int32,   // 0=fixed, 1=adaptive, 2=combined
+    _ wait: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let activations = activations,
+          nFrames > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let actArray = Array(UnsafeBufferPointer(start: activations, count: Int(nFrames)))
+
+    let method: NeuralOnsetDetector.ThresholdMethod
+    switch combineMethod {
+    case 0: method = .fixed
+    case 2: method = .combined
+    default: method = .adaptive
+    }
+
+    let onsetFrames = NeuralOnsetDetector.detect(
+        activations: actArray,
+        fps: fps,
+        threshold: threshold,
+        preMax: Int(preMax),
+        postMax: Int(postMax),
+        preAvg: Int(preAvg),
+        postAvg: Int(postAvg),
+        combineMethod: method,
+        wait: Int(wait)
+    )
+
+    let floatFrames = onsetFrames.map { Float($0) }
+    let result = Signal(data: floatFrames.isEmpty ? [] : floatFrames,
+                        shape: [floatFrames.count], sampleRate: 0)
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")
