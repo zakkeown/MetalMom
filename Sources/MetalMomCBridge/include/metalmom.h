@@ -142,6 +142,13 @@ int32_t mm_clicks(mm_context ctx, const float* times, int32_t n_times,
                   int32_t sr, int64_t length, float click_freq,
                   float click_duration, MMBuffer* out);
 
+/* Onset Evaluation */
+int32_t mm_onset_evaluate(mm_context ctx,
+                          const float* reference, int32_t n_ref,
+                          const float* estimated, int32_t n_est,
+                          float window,
+                          float* out_precision, float* out_recall, float* out_fmeasure);
+
 /* Memory */
 void mm_buffer_free(MMBuffer* buf);
 

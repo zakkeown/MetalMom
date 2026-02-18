@@ -1146,6 +1146,48 @@ public func mm_clicks(
     return fillBuffer(result, out)
 }
 
+// MARK: - Onset Evaluation
+
+@_cdecl("mm_onset_evaluate")
+public func mm_onset_evaluate(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ reference: UnsafePointer<Float>?,
+    _ nRef: Int32,
+    _ estimated: UnsafePointer<Float>?,
+    _ nEst: Int32,
+    _ window: Float,
+    _ outPrecision: UnsafeMutablePointer<Float>?,
+    _ outRecall: UnsafeMutablePointer<Float>?,
+    _ outFMeasure: UnsafeMutablePointer<Float>?
+) -> Int32 {
+    guard let outPrecision = outPrecision,
+          let outRecall = outRecall,
+          let outFMeasure = outFMeasure else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let refArray: [Float]
+    if let r = reference, nRef > 0 {
+        refArray = Array(UnsafeBufferPointer(start: r, count: Int(nRef)))
+    } else {
+        refArray = []
+    }
+
+    let estArray: [Float]
+    if let e = estimated, nEst > 0 {
+        estArray = Array(UnsafeBufferPointer(start: e, count: Int(nEst)))
+    } else {
+        estArray = []
+    }
+
+    let result = OnsetEval.evaluate(reference: refArray, estimated: estArray, window: window)
+    outPrecision.pointee = result.precision
+    outRecall.pointee = result.recall
+    outFMeasure.pointee = result.fMeasure
+
+    return MM_OK
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

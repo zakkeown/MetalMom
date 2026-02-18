@@ -10,3 +10,4 @@ from .feature import (
     rms, zero_crossing_rate, tonnetz,
     delta, stack_memory, poly_features,
 )
+from .evaluate import onset_evaluate
