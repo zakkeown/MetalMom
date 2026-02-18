@@ -402,6 +402,19 @@ ffi.cdef("""
                             float f_min, int32_t bins_per_octave, int32_t n_octaves,
                             int32_t n_chroma, int32_t win_len_smooth, MMBuffer* out);
 
+    /* Feature Inversion: Mel to Audio */
+    int32_t mm_mel_to_audio(mm_context ctx, const float* mel_data, int64_t mel_count,
+                             int32_t n_mels, int32_t n_frames, int32_t sample_rate,
+                             int32_t n_fft, int32_t hop_length, int32_t win_length,
+                             int32_t center, int32_t n_iter, float power,
+                             float f_min, float f_max, int64_t output_length,
+                             MMBuffer* out);
+
+    /* Feature Inversion: MFCC to Mel */
+    int32_t mm_mfcc_to_mel(mm_context ctx, const float* mfcc_data, int64_t mfcc_count,
+                            int32_t n_mfcc, int32_t n_frames, int32_t sample_rate,
+                            int32_t n_mels, MMBuffer* out);
+
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
 """)

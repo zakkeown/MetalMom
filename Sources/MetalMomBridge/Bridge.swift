@@ -2940,6 +2940,94 @@ public func mm_chroma_cens(
     return fillBuffer(result, out)
 }
 
+// MARK: - Mel to Audio (Feature Inversion)
+
+@_cdecl("mm_mel_to_audio")
+public func mm_mel_to_audio(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ melData: UnsafePointer<Float>?,
+    _ melCount: Int64,
+    _ nMels: Int32,
+    _ nFrames: Int32,
+    _ sampleRate: Int32,
+    _ nFFT: Int32,
+    _ hopLength: Int32,
+    _ winLength: Int32,
+    _ center: Int32,
+    _ nIter: Int32,
+    _ power: Float,
+    _ fMin: Float,
+    _ fMax: Float,
+    _ outputLength: Int64,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let melData = melData,
+          melCount > 0,
+          nMels > 0,
+          nFrames > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let count = Int(melCount)
+    let inputArray = Array(UnsafeBufferPointer(start: melData, count: count))
+    let melSpec = Signal(data: inputArray, shape: [Int(nMels), Int(nFrames)],
+                         sampleRate: Int(sampleRate))
+
+    let hopOpt: Int? = hopLength > 0 ? Int(hopLength) : nil
+    let winOpt: Int? = winLength > 0 ? Int(winLength) : nil
+    let lenOpt: Int? = outputLength > 0 ? Int(outputLength) : nil
+    let fMaxOpt: Float? = fMax > 0 ? fMax : nil
+
+    let result = Inversion.melToAudio(
+        melSpectrogram: melSpec,
+        sr: Int(sampleRate),
+        nFFT: Int(nFFT),
+        hopLength: hopOpt,
+        winLength: winOpt,
+        center: center != 0,
+        power: power,
+        nIter: Int(nIter),
+        fMin: fMin,
+        fMax: fMaxOpt,
+        length: lenOpt
+    )
+
+    return fillBuffer(result, out)
+}
+
+// MARK: - MFCC to Mel (Feature Inversion)
+
+@_cdecl("mm_mfcc_to_mel")
+public func mm_mfcc_to_mel(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ mfccData: UnsafePointer<Float>?,
+    _ mfccCount: Int64,
+    _ nMFCC: Int32,
+    _ nFrames: Int32,
+    _ sampleRate: Int32,
+    _ nMels: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let mfccData = mfccData,
+          mfccCount > 0,
+          nMFCC > 0,
+          nFrames > 0,
+          nMels > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let count = Int(mfccCount)
+    let inputArray = Array(UnsafeBufferPointer(start: mfccData, count: count))
+    let mfcc = Signal(data: inputArray, shape: [Int(nMFCC), Int(nFrames)],
+                      sampleRate: Int(sampleRate))
+
+    let result = Inversion.mfccToMel(mfcc: mfcc, nMels: Int(nMels))
+
+    return fillBuffer(result, out)
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

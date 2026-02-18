@@ -1722,3 +1722,167 @@ def d_weighting(frequencies):
         rD = np.abs(frequencies) / 6.8966888496476e-5 * np.sqrt(inner)
         result = np.where(rD > 0, 20.0 * np.log10(rD), -np.inf)
     return result.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Feature Inversion
+# ---------------------------------------------------------------------------
+
+def mel_to_audio(M, sr=22050, n_fft=2048, hop_length=None, win_length=None,
+                 center=True, power=2.0, n_iter=32, fmin=0.0, fmax=None,
+                 length=None, **kwargs):
+    """Reconstruct audio from a mel spectrogram using Griffin-Lim.
+
+    Parameters
+    ----------
+    M : np.ndarray
+        Mel spectrogram, shape ``(n_mels, n_frames)``.
+    sr : int
+        Sample rate.  Default: 22050.
+    n_fft : int
+        FFT window size.  Default: 2048.
+    hop_length : int or None
+        Hop length.  Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length.  Default: ``n_fft``.
+    center : bool
+        Assume centred STFT.  Default: True.
+    power : float
+        Exponent used when computing the mel spectrogram.  Default: 2.0
+        (power spectrogram).  The inverse takes the ``1/power`` root.
+    n_iter : int
+        Number of Griffin-Lim iterations.  Default: 32.
+    fmin : float
+        Lowest mel frequency (Hz).  Default: 0.0.
+    fmax : float or None
+        Highest mel frequency (Hz).  Default: ``sr / 2``.
+    length : int or None
+        Desired output length.  Default: None.
+
+    Returns
+    -------
+    np.ndarray
+        Reconstructed audio signal (1-D float32).
+    """
+    if M is None:
+        raise ValueError("M must be provided")
+
+    M = np.ascontiguousarray(M, dtype=np.float32)
+    n_mels, n_frames = M.shape
+
+    c_hop = int(hop_length) if hop_length is not None else 0
+    c_win = int(win_length) if win_length is not None else 0
+    c_fmax = float(fmax) if fmax is not None else 0.0
+    c_length = int(length) if length is not None else 0
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        mel_ptr = ffi.cast("const float*", M.ctypes.data)
+
+        status = lib.mm_mel_to_audio(
+            ctx, mel_ptr, M.size,
+            n_mels, n_frames, sr,
+            n_fft, c_hop, c_win,
+            1 if center else 0, n_iter, float(power),
+            fmin, c_fmax, c_length,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_mel_to_audio failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def mfcc_to_mel(M, n_mels=128, sr=22050, **kwargs):
+    """Approximate mel spectrogram from MFCCs (inverse DCT).
+
+    Parameters
+    ----------
+    M : np.ndarray
+        MFCCs, shape ``(n_mfcc, n_frames)``.
+    n_mels : int
+        Number of mel bands in the target mel spectrogram.  Default: 128.
+    sr : int
+        Sample rate (used only for context creation).  Default: 22050.
+
+    Returns
+    -------
+    np.ndarray
+        Approximate mel spectrogram, shape ``(n_mels, n_frames)``.
+    """
+    if M is None:
+        raise ValueError("M must be provided")
+
+    M = np.ascontiguousarray(M, dtype=np.float32)
+    n_mfcc, n_frames = M.shape
+
+    ctx = lib.mm_init()
+    if ctx == ffi.NULL:
+        raise RuntimeError("Failed to initialize MetalMom context")
+
+    try:
+        out = ffi.new("MMBuffer*")
+        mfcc_ptr = ffi.cast("const float*", M.ctypes.data)
+
+        status = lib.mm_mfcc_to_mel(
+            ctx, mfcc_ptr, M.size,
+            n_mfcc, n_frames, sr,
+            n_mels,
+            out,
+        )
+        if status != 0:
+            raise RuntimeError(f"mm_mfcc_to_mel failed with status {status}")
+
+        return buffer_to_numpy(out)
+    finally:
+        lib.mm_destroy(ctx)
+
+
+def mfcc_to_audio(M, sr=22050, n_mels=128, n_fft=2048, hop_length=None,
+                   win_length=None, center=True, n_iter=32,
+                   fmin=0.0, fmax=None, length=None, **kwargs):
+    """Reconstruct audio from MFCCs.
+
+    Converts MFCC coefficients to a mel spectrogram via inverse DCT,
+    then reconstructs audio via mel-to-audio inversion (Griffin-Lim).
+
+    Parameters
+    ----------
+    M : np.ndarray
+        MFCCs, shape ``(n_mfcc, n_frames)``.
+    sr : int
+        Sample rate.  Default: 22050.
+    n_mels : int
+        Number of mel bands.  Default: 128.
+    n_fft : int
+        FFT window size.  Default: 2048.
+    hop_length : int or None
+        Hop length.  Default: ``n_fft // 4``.
+    win_length : int or None
+        Window length.  Default: ``n_fft``.
+    center : bool
+        Assume centred STFT.  Default: True.
+    n_iter : int
+        Number of Griffin-Lim iterations.  Default: 32.
+    fmin : float
+        Lowest mel frequency (Hz).  Default: 0.0.
+    fmax : float or None
+        Highest mel frequency (Hz).  Default: ``sr / 2``.
+    length : int or None
+        Desired output length.  Default: None.
+
+    Returns
+    -------
+    np.ndarray
+        Reconstructed audio signal (1-D float32).
+    """
+    mel = mfcc_to_mel(M, n_mels=n_mels, sr=sr)
+    return mel_to_audio(mel, sr=sr, n_fft=n_fft, hop_length=hop_length,
+                        win_length=win_length, center=center, n_iter=n_iter,
+                        fmin=fmin, fmax=fmax, length=length)
