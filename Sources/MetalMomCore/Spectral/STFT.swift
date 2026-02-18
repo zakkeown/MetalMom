@@ -207,4 +207,171 @@ extension STFT {
         let dispatcher = SmartDispatcher()
         return dispatcher.dispatch(op, input: input, dataSize: signal.count).magnitude
     }
+
+    /// Compute complex STFT returning interleaved real/imag Signal with dtype `.complex64`.
+    /// Shape is [nFreqs, nFrames] (logical complex elements); raw float storage is 2x that.
+    public static func computeComplex(
+        signal: Signal,
+        nFFT: Int = 2048,
+        hopLength: Int? = nil,
+        winLength: Int? = nil,
+        center: Bool = true
+    ) -> Signal {
+        let hop = hopLength ?? nFFT / 4
+        let win = winLength ?? nFFT
+        let nFreqs = nFFT / 2 + 1
+
+        // --- 1. Optionally pad the signal ---
+        let padded: [Float]
+        if center {
+            let padAmount = nFFT / 2
+            padded = [Float](repeating: 0, count: padAmount)
+                   + signal.withUnsafeBufferPointer { Array($0) }
+                   + [Float](repeating: 0, count: padAmount)
+        } else {
+            padded = signal.withUnsafeBufferPointer { Array($0) }
+        }
+
+        let paddedLength = padded.count
+
+        // --- 2. Compute number of frames ---
+        guard paddedLength >= nFFT else {
+            return Signal(complexData: [], shape: [nFreqs, 0], sampleRate: signal.sampleRate)
+        }
+        let nFrames = 1 + (paddedLength - nFFT) / hop
+
+        // --- 3. Prepare window ---
+        let window = Windows.hann(length: win, periodic: true)
+        let fullWindow: [Float]
+        if win < nFFT {
+            let padBefore = (nFFT - win) / 2
+            let padAfter = nFFT - win - padBefore
+            fullWindow = [Float](repeating: 0, count: padBefore)
+                       + window
+                       + [Float](repeating: 0, count: padAfter)
+        } else {
+            fullWindow = window
+        }
+
+        // --- 4. Set up vDSP FFT ---
+        let log2n = vDSP_Length(log2(Double(nFFT)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            fatalError("Failed to create FFT setup for nFFT=\(nFFT)")
+        }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
+
+        // --- 5. Allocate complex output buffer ---
+        // Column-major temp: for each frame, nFreqs interleaved pairs (2 * nFreqs floats).
+        // Layout: tempPtr[(frame * nFreqs + freq) * 2 + 0] = real
+        //         tempPtr[(frame * nFreqs + freq) * 2 + 1] = imag
+        let totalComplex = nFreqs * nFrames
+        let totalFloats = totalComplex * 2
+        let tempPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalFloats)
+        tempPtr.initialize(repeating: 0, count: totalFloats)
+
+        let halfN = nFFT / 2
+        let realPart = UnsafeMutablePointer<Float>.allocate(capacity: halfN)
+        let imagPart = UnsafeMutablePointer<Float>.allocate(capacity: halfN)
+        defer {
+            realPart.deallocate()
+            imagPart.deallocate()
+        }
+
+        let windowedFrame = UnsafeMutablePointer<Float>.allocate(capacity: nFFT)
+        defer { windowedFrame.deallocate() }
+
+        // --- 6. Process each frame ---
+        padded.withUnsafeBufferPointer { paddedBuf in
+            fullWindow.withUnsafeBufferPointer { winBuf in
+                for frame in 0..<nFrames {
+                    let start = frame * hop
+
+                    // Apply window
+                    vDSP_vmul(
+                        paddedBuf.baseAddress! + start, 1,
+                        winBuf.baseAddress!, 1,
+                        windowedFrame, 1,
+                        vDSP_Length(nFFT)
+                    )
+
+                    // Pack into split complex for vDSP_fft_zrip
+                    var splitComplex = DSPSplitComplex(realp: realPart, imagp: imagPart)
+                    windowedFrame.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { complexPtr in
+                        vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
+                    }
+
+                    // Forward FFT (in-place)
+                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(kFFTDirection_Forward))
+
+                    // Scale by 0.5 to normalize (vDSP_fft_zrip has factor-of-2)
+                    var scale: Float = 0.5
+                    vDSP_vsmul(realPart, 1, &scale, realPart, 1, vDSP_Length(halfN))
+                    vDSP_vsmul(imagPart, 1, &scale, imagPart, 1, vDSP_Length(halfN))
+
+                    // --- 7. Store interleaved complex output (column-major) ---
+                    // Column offset in complex elements
+                    let colBase = frame * nFreqs
+
+                    // DC bin (index 0): real = realp[0], imag = 0
+                    tempPtr[(colBase + 0) * 2 + 0] = realPart[0]
+                    tempPtr[(colBase + 0) * 2 + 1] = 0.0
+
+                    // Bins 1..<halfN: real = realp[k], imag = imagp[k]
+                    for k in 1..<halfN {
+                        tempPtr[(colBase + k) * 2 + 0] = realPart[k]
+                        tempPtr[(colBase + k) * 2 + 1] = imagPart[k]
+                    }
+
+                    // Nyquist bin (index nFreqs-1 = halfN): real = imagp[0], imag = 0
+                    tempPtr[(colBase + nFreqs - 1) * 2 + 0] = imagPart[0]
+                    tempPtr[(colBase + nFreqs - 1) * 2 + 1] = 0.0
+                }
+            }
+        }
+
+        // --- 8. Transpose from column-major to row-major ---
+        // tempPtr is column-major: element (freq, frame) at tempPtr[(frame * nFreqs + freq) * 2]
+        // We need row-major: element (freq, frame) at outPtr[(freq * nFrames + frame) * 2]
+        //
+        // Treat each complex element as a pair of floats. We transpose the [nFrames, nFreqs]
+        // matrix of pairs to [nFreqs, nFrames] by transposing real and imaginary planes separately.
+        let outPtr = UnsafeMutablePointer<Float>.allocate(capacity: totalFloats)
+
+        // Extract real plane, transpose, store back
+        // temp real plane: tempPtr[i*2] for i in 0..<totalComplex
+        // We need a temporary plane buffer for the transpose
+        let realPlane = UnsafeMutablePointer<Float>.allocate(capacity: totalComplex)
+        let imagPlane = UnsafeMutablePointer<Float>.allocate(capacity: totalComplex)
+        let realPlaneOut = UnsafeMutablePointer<Float>.allocate(capacity: totalComplex)
+        let imagPlaneOut = UnsafeMutablePointer<Float>.allocate(capacity: totalComplex)
+        defer {
+            realPlane.deallocate()
+            imagPlane.deallocate()
+            realPlaneOut.deallocate()
+            imagPlaneOut.deallocate()
+        }
+
+        // De-interleave: extract real and imag planes from interleaved temp buffer
+        // vDSP_ctoz splits interleaved [r0,i0,r1,i1,...] into split complex {realp, imagp}
+        var splitPlane = DSPSplitComplex(realp: realPlane, imagp: imagPlane)
+        tempPtr.withMemoryRebound(to: DSPComplex.self, capacity: totalComplex) { complexPtr in
+            vDSP_ctoz(complexPtr, 2, &splitPlane, 1, vDSP_Length(totalComplex))
+        }
+
+        // Transpose each plane: [nFrames rows x nFreqs cols] -> [nFreqs rows x nFrames cols]
+        vDSP_mtrans(realPlane, 1, realPlaneOut, 1, vDSP_Length(nFreqs), vDSP_Length(nFrames))
+        vDSP_mtrans(imagPlane, 1, imagPlaneOut, 1, vDSP_Length(nFreqs), vDSP_Length(nFrames))
+
+        // Re-interleave into outPtr using vDSP_ztoc
+        var splitOut = DSPSplitComplex(realp: realPlaneOut, imagp: imagPlaneOut)
+        outPtr.withMemoryRebound(to: DSPComplex.self, capacity: totalComplex) { complexPtr in
+            vDSP_ztoc(&splitOut, 1, complexPtr, 2, vDSP_Length(totalComplex))
+        }
+
+        tempPtr.deallocate()
+
+        let outBuffer = UnsafeMutableBufferPointer(start: outPtr, count: totalFloats)
+        return Signal(taking: outBuffer, shape: [nFreqs, nFrames],
+                      sampleRate: signal.sampleRate, dtype: .complex64)
+    }
 }
