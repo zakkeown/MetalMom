@@ -274,13 +274,15 @@ def extract_conv_weights(conv_layer):
     Extract weights from a madmom ConvolutionalLayer stub.
 
     madmom stores conv weights as (in_channels, out_channels, height, width).
-    CoreML add_convolution expects (height, width, kernel_channels, output_channels).
+    CoreML add_convolution expects W in shape (height, width, kernel_channels,
+    output_channels) per the coremltools docs.  We transpose accordingly.
 
     Returns (W, b, kernel_h, kernel_w, in_channels, out_channels, stride, pad_mode).
     """
     w = conv_layer.weights.astype(np.float32)
     in_ch, out_ch, kh, kw = w.shape
-    # Transpose: (in_ch, out_ch, h, w) -> (h, w, in_ch, out_ch)
+    # Transpose: (in_ch, out_ch, kH, kW) -> (kH, kW, in_ch, out_ch)
+    # CoreML add_convolution expects shape (H, W, kernel_channels, output_channels).
     W = w.transpose(2, 3, 0, 1)
 
     # Bias might be zeros or a scalar array

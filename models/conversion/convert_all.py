@@ -54,6 +54,7 @@ from madmom_loader import (
     extract_crf_params,
     get_activation_name,
 )
+from numpy_forward import _compute_min_cnn_spatial, _detect_cnn_freq_dim
 
 
 # ---------------------------------------------------------------------------
@@ -724,6 +725,50 @@ def convert_rnn_model(layers, name, output_dir):
 # Converter: CNN models
 # ---------------------------------------------------------------------------
 
+def _compute_cnn_coreml_input(layers):
+    """Compute the CoreML input shape (C, min_h, default_h, W) and skip_bn.
+
+    Returns
+    -------
+    (C, min_h, default_h, W, skip_bn) : tuple
+        C, W are spatial dimensions (excluding batch).
+        min_h is the minimum H for the flex range lower bound.
+        default_h is the default H for the Array declaration (larger than
+        min_h to avoid CoreML inference issues when actual input > default).
+        skip_bn=True for onsets_cnn (3D BN applied in numpy preprocessing).
+    """
+    first_name = layer_type_name(layers[0])
+
+    # Detect 3D BatchNorm = onsets_cnn
+    if first_name == "BatchNormLayer":
+        bn = layers[0]
+        if hasattr(bn, 'mean') and bn.mean.ndim == 2:
+            num_specs = bn.mean.shape[1]   # 3 (channels)
+            freq_bins = bn.mean.shape[0]   # 80
+            return num_specs, 15, 15, freq_bins, True
+
+    # Standard CNN (key_cnn, chords_cnnfeat)
+    first_conv = None
+    for l in layers:
+        if layer_type_name(l) == "ConvolutionalLayer":
+            first_conv = l
+            break
+    assert first_conv is not None, "No ConvolutionalLayer found"
+
+    in_channels = first_conv.weights.shape[0]
+    min_h, _ = _compute_min_cnn_spatial(layers)
+    freq_dim = _detect_cnn_freq_dim(layers, in_channels, min_h)
+
+    # Use a larger default H for the Array declaration. CoreML's runtime
+    # produces incorrect results when the declared default shape is much
+    # smaller than the actual inference input (e.g. default=8, actual=50).
+    # Setting the default to 200 ensures typical inputs are at or below
+    # the default, while the flex range still allows min_h and above.
+    default_h = max(min_h * 8, 200)
+
+    return in_channels, min_h, default_h, freq_dim, False
+
+
 def convert_cnn_model(layers, name, output_dir):
     """
     Convert a CNN model. Handles:
@@ -731,45 +776,25 @@ def convert_cnn_model(layers, name, output_dir):
       - ConvolutionalLayer -> add_convolution
       - BatchNormLayer -> add_batchnorm + activation
       - MaxPoolLayer -> add_pooling
-      - StrideLayer -> add_reshape_static (stride/block interleave)
-      - AverageLayer -> add_reduce_mean (global average pooling)
+      - StrideLayer -> permute + flatten (correct feature ordering)
+      - AverageLayer -> global average pooling
       - FeedForwardLayer -> add_inner_product + activation
 
-    The CNN models operate on 2D spectrograms, not sequences.
-    Input shape convention: [1, C, H, W] where C=channels, H=freq, W=time
+    The CNN models operate on 2D spectrograms.
+    Input shape: rank-5 [1, C, H, W, 1] where C=channels, H=time, W=freq.
 
-    We determine input shape from the first Conv layer's weight dimensions.
+    For onsets_cnn, the 3D BatchNorm is skipped (applied in numpy preprocessing
+    before feeding data to CoreML).
     """
-    # Analyze the layer sequence to determine input shape
-    first_conv = None
-    first_bn_before_conv = None
-    for l in layers:
-        tn = layer_type_name(l)
-        if tn == "ConvolutionalLayer" and first_conv is None:
-            first_conv = l
-            break
-        if tn == "BatchNormLayer" and first_conv is None:
-            first_bn_before_conv = l
+    # Compute proper input shape
+    C, min_h, default_h, W, skip_bn = _compute_cnn_coreml_input(layers)
 
-    assert first_conv is not None, "No ConvolutionalLayer found"
-
-    in_channels = first_conv.weights.shape[0]
-
-    # For the onset CNN, the BatchNorm before conv operates on (80, 3)
-    # meaning input is (3, 80) in CoreML (C, H) format, but really the
-    # BN has shape (80, 3) = (freq_bins, channels).
-    # The CNN models treat input as image-like: (C, H, W) = (channels, height, width)
-
-    # Build with flexible input — we'll use the builder's spec to set shapes
-    # Input: [1, C, H, W] for CNN
-    # For simplicity, we use a large placeholder and note the actual shapes
-    # in model metadata.
-
-    # We need to trace through the layers to determine the final output size
-    # Instead, let's build the model and handle each layer type
-
+    # Use rank-4 input for CoreML CNN: (1, C, H, W)
+    # CoreML Conv layers require rank >= 4. Rank-4 avoids the rank-5
+    # pooling issue where the D dimension gets reduced to 0.
+    # default_h is larger than min_h to avoid CoreML inference issues.
     input_features = [
-        ("input", ct.models.datatypes.Array(1, 1, 1)),
+        ("input", ct.models.datatypes.Array(1, C, default_h, W)),
     ]
     output_features = [("output", ct.models.datatypes.Array(1))]
 
@@ -778,11 +803,27 @@ def convert_cnn_model(layers, name, output_dir):
         disable_rank5_shape_mapping=True
     )
 
+    # For standard CNN (not onsets), make H dimension flexible so parity
+    # tests can feed any seq_len >= min_h.
+    if not skip_bn:
+        spec = builder.spec
+        input_desc = spec.description.input[0]
+        flex = input_desc.type.multiArrayType.shapeRange
+        for lo, hi in [
+            (1, 1), (C, C), (min_h, -1), (W, W)
+        ]:
+            r = flex.sizeRanges.add()
+            r.lowerBound = lo
+            r.upperBound = hi
+
     prev_name = "input"
     layer_idx = 0
     needs_flatten = False
 
-    for i, l in enumerate(layers):
+    # Skip 3D BN for onsets_cnn (applied in numpy preprocessing)
+    layer_list = layers[1:] if skip_bn else layers
+
+    for i, l in enumerate(layer_list):
         tn = layer_type_name(l)
 
         if tn == "PadLayer":
@@ -800,7 +841,7 @@ def convert_cnn_model(layers, name, output_dir):
             layer_idx += 1
 
         elif tn == "ConvolutionalLayer":
-            W, b, kh, kw, in_ch, out_ch, stride, pad_mode = \
+            W_conv, b, kh, kw, in_ch, out_ch, stride, pad_mode = \
                 extract_conv_weights(l)
             has_nonzero_bias = np.any(b != 0)
             out_name = f"conv_{layer_idx}"
@@ -811,7 +852,7 @@ def convert_cnn_model(layers, name, output_dir):
                 stride_height=stride, stride_width=stride,
                 border_mode="valid",  # madmom CNNs all use 'valid'
                 groups=1,
-                W=W, b=b, has_bias=has_nonzero_bias,
+                W=W_conv, b=b, has_bias=has_nonzero_bias,
                 input_name=prev_name, output_name=out_name,
             )
             prev_name = out_name
@@ -880,11 +921,19 @@ def convert_cnn_model(layers, name, output_dir):
             layer_idx += 1
 
         elif tn == "StrideLayer":
-            # StrideLayer in madmom takes every Nth element — equivalent to
-            # a reshape that interleaves features. For the onset CNN,
-            # block_size=7 means the flattened features are strided.
-            # In practice this acts like a flatten before the dense layer.
-            # We'll use flatten_to_2d to handle the transition.
+            # StrideLayer in madmom: transpose(0,2,1,3) then flatten.
+            # The numpy code does: (N,C,H,W) -> transpose -> (N,H,C,W)
+            # -> reshape to (H, C*W) -> sliding window.
+            # When H == block_size (T_out=1), this is just permute+flatten.
+            perm_name = f"perm_{layer_idx}"
+            builder.add_permute(
+                name=perm_name,
+                dim=(0, 2, 1, 3),
+                input_name=prev_name, output_name=perm_name,
+            )
+            prev_name = perm_name
+            layer_idx += 1
+
             out_name = f"flatten_{layer_idx}"
             builder.add_flatten_to_2d(
                 name=f"flatten_{layer_idx}",
@@ -898,7 +947,6 @@ def convert_cnn_model(layers, name, output_dir):
         elif tn == "AverageLayer":
             # Global average pooling over spatial dimensions
             out_name = f"avg_pool_{layer_idx}"
-            # Use global average pooling
             builder.add_pooling(
                 name=f"avg_pool_{layer_idx}",
                 height=1, width=1,
@@ -923,13 +971,13 @@ def convert_cnn_model(layers, name, output_dir):
                 layer_idx += 1
                 needs_flatten = True
 
-            W, b = extract_dense_weights(l)
-            in_ch = W.shape[1]
-            out_ch = W.shape[0]
+            W_dense, b = extract_dense_weights(l)
+            in_ch = W_dense.shape[1]
+            out_ch = W_dense.shape[0]
 
             # Check if this is the last layer
             remaining = [
-                ll for ll in layers[i + 1:]
+                ll for ll in layer_list[i + 1:]
                 if layer_type_name(ll) == "FeedForwardLayer"
             ]
             is_last = len(remaining) == 0
@@ -937,7 +985,7 @@ def convert_cnn_model(layers, name, output_dir):
             out_name = "dense_out" if is_last else f"dense_{layer_idx}"
             builder.add_inner_product(
                 name=f"dense_{layer_idx}",
-                W=W, b=b,
+                W=W_dense, b=b,
                 input_channels=in_ch, output_channels=out_ch,
                 has_bias=True,
                 input_name=prev_name, output_name=out_name,

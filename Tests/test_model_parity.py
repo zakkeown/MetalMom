@@ -18,8 +18,8 @@ Notes:
       madmom: h = (1 - z) * h_prev   + z * candidate
     The test uses the CoreML equation to match the converted model.
   - CRF models (.npz) are skipped -- they have no neural forward pass.
-  - CNN models are skipped -- CoreML spec has placeholder input shapes that
-    don't accept the actual input dimensions at runtime.
+  - CNN models use rank-5 input (1, C, H, W, 1). For onsets_cnn, the 3D
+    BatchNorm is applied in numpy preprocessing (skipped in CoreML model).
   - Recurrent model inputs must be reshaped to rank-5 for CoreML:
     (seq_len, input_dim) -> (seq_len, 1, input_dim, 1, 1)
 """
@@ -51,6 +51,16 @@ from numpy_forward import (  # noqa: E402
     generate_golden,
     _detect_input_dim,
     _run_dnn_model,
+    _run_onsets_cnn,
+    _run_standard_cnn,
+    _compute_min_cnn_spatial,
+    _detect_cnn_freq_dim,
+    conv2d_forward,
+    batchnorm_forward,
+    maxpool_forward,
+    pad_forward,
+    average_forward,
+    stride_forward,
     sigmoid,
 )
 
@@ -315,6 +325,117 @@ def reshape_coreml_output(output, expected_shape):
 
 
 # ---------------------------------------------------------------------------
+# CNN parity helper
+# ---------------------------------------------------------------------------
+
+def _generate_cnn_golden_for_coreml(model, seq_len, seed):
+    """
+    Generate (coreml_input, expected_output) for CNN models.
+
+    - onsets_cnn (3D BN): applies BN in numpy, returns post-BN data as
+      CoreML input (rank-5) and the full numpy output.
+    - standard CNN (key_cnn, chords_cnnfeat): generates rank-5 input matching
+      CoreML's declared shape and runs numpy forward pass.
+    """
+    model_type, layers = classify_model(model)
+
+    first_name = layer_type_name(layers[0])
+    is_onsets = first_name == "BatchNormLayer" and layers[0].mean.ndim == 2
+
+    if is_onsets:
+        bn = layers[0]
+        freq_bins = bn.mean.shape[0]   # 80
+        num_specs = bn.mean.shape[1]   # 3
+
+        # Generate 3D input with seeded RNG (same seed as _run_onsets_cnn)
+        np.random.seed(seed)
+        x = np.random.randn(seq_len, freq_bins, num_specs).astype(np.float32) * 0.1
+
+        # Apply BN on 3D data
+        mean = np.asarray(bn.mean).astype(np.float32)
+        inv_std = np.asarray(bn.inv_std).astype(np.float32)
+        gamma = np.broadcast_to(
+            np.asarray(getattr(bn, "gamma", 1)).astype(np.float32).flatten(),
+            (freq_bins * num_specs,),
+        ).copy().reshape(freq_bins, num_specs)
+        beta = np.broadcast_to(
+            np.asarray(getattr(bn, "beta", 0)).astype(np.float32).flatten(),
+            (freq_bins * num_specs,),
+        ).copy().reshape(freq_bins, num_specs)
+        x = gamma * (x - mean) * inv_std + beta
+
+        # Reshape to 4D: (T, 80, 3) -> (1, 3, T, 80)
+        x = x.transpose(0, 2, 1)
+        x = x.reshape(1, num_specs, seq_len, freq_bins)
+
+        # Save post-BN data as CoreML input (rank-4: 1, C, H, W)
+        coreml_input = x.copy()  # already (1, C, T, freq)
+
+        # Run remaining layers to get expected output
+        for layer in layers[1:]:
+            name = layer_type_name(layer)
+            if name == "ConvolutionalLayer":
+                x = conv2d_forward(x, layer)
+            elif name == "BatchNormLayer":
+                x = batchnorm_forward(x, layer)
+            elif name == "MaxPoolLayer":
+                x = maxpool_forward(x, layer)
+            elif name == "StrideLayer":
+                x = stride_forward(x, layer)
+            elif name == "FeedForwardLayer":
+                if x.ndim == 4:
+                    x = x.reshape(x.shape[0], -1)
+                x = dense_forward(x, layer)
+
+        return coreml_input, x
+
+    else:
+        # Standard CNN (key_cnn, chords_cnnfeat)
+        first_conv = None
+        for l in layers:
+            if layer_type_name(l) == "ConvolutionalLayer":
+                first_conv = l
+                break
+        in_channels = first_conv.weights.shape[0]
+        min_h, _ = _compute_min_cnn_spatial(layers)
+        effective_seq = max(seq_len, min_h)
+        freq_dim = _detect_cnn_freq_dim(layers, in_channels, effective_seq)
+
+        # Generate input and run numpy forward pass
+        np.random.seed(seed)
+        x = np.random.randn(1, in_channels, effective_seq, freq_dim).astype(
+            np.float32
+        ) * 0.1
+        input_4d = x.copy()
+
+        for layer in layers:
+            name = layer_type_name(layer)
+            if name == "PadLayer":
+                x = pad_forward(x, layer)
+            elif name == "ConvolutionalLayer":
+                x = conv2d_forward(x, layer)
+            elif name == "BatchNormLayer":
+                x = batchnorm_forward(x, layer)
+            elif name == "MaxPoolLayer":
+                x = maxpool_forward(x, layer)
+            elif name == "AverageLayer":
+                x = average_forward(x)
+            elif name == "StrideLayer":
+                x = stride_forward(x, layer)
+            elif name == "FeedForwardLayer":
+                if x.ndim == 4:
+                    x = x.reshape(x.shape[0], -1)
+                x = dense_forward(x, layer)
+
+        if x.ndim == 4:
+            x = x.reshape(x.shape[0], -1)
+
+        # Input is already rank-4 (1, C, H, W) for CoreML
+        coreml_input = input_4d
+        return coreml_input, x
+
+
+# ---------------------------------------------------------------------------
 # DNN parity helper (single-frame inference)
 # ---------------------------------------------------------------------------
 
@@ -386,17 +507,11 @@ def test_model_parity(pkl_path, mlmodel_path, model_name, family):
     if model_type == "crf":
         pytest.skip("CRF models have no neural forward pass")
 
-    # Skip CNN models (CoreML spec has placeholder shapes)
-    if model_type == "cnn":
-        pytest.skip(
-            "CNN models have placeholder input shapes in CoreML spec; "
-            "cannot run inference with actual input dimensions"
-        )
-
     # Determine tolerance based on model type
-    # Recurrent models accumulate FP differences over sequence length
     if model_type in ("bilstm", "lstm", "bigru", "birnn", "rnn"):
         tolerance = 1e-3
+    elif model_type == "cnn":
+        tolerance = 1e-3  # FP accumulation through many conv layers
     else:
         tolerance = 1e-4
 
@@ -406,20 +521,27 @@ def test_model_parity(pkl_path, mlmodel_path, model_name, family):
         _run_dnn_parity(model, mlmodel_path, model_name, family, tolerance)
         return
 
-    # Generate golden reference (no peephole for LSTM/BiLSTM)
-    input_arr, expected_output = generate_golden_coreml(
-        model, seq_len=SEQ_LEN, seed=SEED
-    )
+    # CNN models: special golden generation with proper input shapes
+    if model_type == "cnn":
+        # onsets_cnn uses fixed T=15; standard CNNs use SEQ_LEN
+        first_name = layer_type_name(data[0])
+        is_onsets = first_name == "BatchNormLayer" and data[0].mean.ndim == 2
+        cnn_seq = 15 if is_onsets else SEQ_LEN
+        coreml_input, expected_output = _generate_cnn_golden_for_coreml(
+            model, seq_len=cnn_seq, seed=SEED
+        )
+    else:
+        # Generate golden reference (no peephole for LSTM/BiLSTM)
+        input_arr, expected_output = generate_golden_coreml(
+            model, seq_len=SEQ_LEN, seed=SEED
+        )
 
-    if input_arr is None:
-        pytest.skip("Model produced no golden output")
+        if input_arr is None:
+            pytest.skip("Model produced no golden output")
 
-    # Reshape input for CoreML
-    if model_type in ("bilstm", "lstm", "bigru", "birnn", "rnn"):
+        # Reshape input for CoreML
         # Recurrent: (seq_len, features) -> (seq_len, 1, features, 1, 1)
         coreml_input = reshape_for_coreml_recurrent(input_arr)
-    else:
-        coreml_input = input_arr
 
     # Run CoreML inference
     coreml_output = predict_model(

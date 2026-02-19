@@ -260,57 +260,43 @@ final class ModelInferenceTests: XCTestCase {
         )
     }
 
-    // MARK: - Onsets CNN (input: [1,1,1], output: [1], sigmoid)
+    // MARK: - Onsets CNN (input: [1,3,15,80], output: [1], sigmoid)
     //
-    // The onsets CNN processes spectrogram patches. Its CoreML spec declares
-    // a placeholder input shape of [1,1,1] which is too small for the
-    // convolution/pooling layers. CoreML compiles the model successfully
-    // but inference fails because the pooling output has zero spatial dims.
-    // This is a known conversion artifact -- the model needs a proper input
-    // shape override to work (e.g. [1,15,80]), but CoreML NeuralNetwork
-    // does not support dynamic input shapes.
+    // The onsets CNN processes spectrogram patches. The 3D BatchNorm is
+    // skipped in CoreML (applied in numpy preprocessing), so the model
+    // expects post-BN data shaped as (1, 3, 15, 80) = (batch, channels, time, freq).
 
     func testOnsetsCnn() throws {
-        guard let url = Self.modelURL(family: "onsets", name: "onsets_cnn") else {
-            throw XCTSkip("onsets_cnn.mlmodel not found")
-        }
-        // Verify the model file exists on disk. Compilation fails because
-        // the declared input shape [1,1,1] is too small for the conv/pool
-        // layers, resulting in zero-dimension output. This is a known
-        // conversion artifact that will be resolved when proper input shape
-        // overrides are added.
-        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-        XCTAssertThrowsError(
-            try InferenceEngine(sourceModelURL: url, computeUnits: .cpuOnly),
-            "onsets_cnn should fail to compile with placeholder input shape"
+        try smokeTest(
+            family: "onsets", name: "onsets_cnn",
+            inputShape: [1, 3, 15, 80],
+            expectedOutputCount: 1,
+            sigmoidOutput: true
         )
     }
 
-    // MARK: - Chords CNN Feature Extractor
+    // MARK: - Chords CNN Feature Extractor (input: [1,1,21,168], output: [3456])
     //
-    // Similar to onsets_cnn, the chords CNN feature model declares a
-    // placeholder input shape [1,1,1] but requires rank >= 4 for its
-    // convolution layers. CoreML rejects the model at compilation time.
+    // The chords CNN extracts features via Conv/BN/Pool blocks. Output is a
+    // raw feature map (no dense or average pool layer).
 
     func testChordsCnnFeat() throws {
-        guard let url = Self.modelURL(family: "chords", name: "chords_cnnfeat") else {
-            throw XCTSkip("chords_cnnfeat.mlmodel not found")
-        }
-        // Verify the model file exists on disk. Full inference requires a
-        // proper input shape that the current CoreML spec does not declare.
-        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        try smokeTest(
+            family: "chords", name: "chords_cnnfeat",
+            inputShape: [1, 1, 21, 168],
+            expectedOutputCount: 3456
+        )
     }
 
-    // MARK: - Key CNN (input: [1,1,1], output: [24])
+    // MARK: - Key CNN (input: [1,1,8,168], output: [24])
     //
     // The key CNN uses explicit padding layers before convolutions and
-    // global average pooling at the end. It works with the declared [1,1,1]
-    // input shape, producing 24 outputs (one per channel after global avg pool).
+    // global average pooling at the end, producing 24 outputs (one per key).
 
     func testKeyCnn() throws {
         try smokeTest(
             family: "key", name: "key_cnn",
-            inputShape: [1, 1, 1],
+            inputShape: [1, 1, 8, 168],
             expectedOutputCount: 24
         )
     }

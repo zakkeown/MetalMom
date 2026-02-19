@@ -378,30 +378,31 @@ class TestKeyDetection:
 
         model = _model_path("key", "key_cnn")
 
-        # The key CNN expects spectrogram-like input.  We create a simple
-        # synthetic input that we know the model can process -- the exact
-        # key prediction may not be C major on synthetic data but it
-        # should run without errors and produce a 24-class output.
+        # The key CNN expects rank-5 input: (1, 1, T, 168, 1)
+        # where 168 = log-frequency bins.  We compute a mel spectrogram
+        # and reshape to match the model's expected input format.
         sr = 22050
         signal = make_scale(self.C_MAJOR_HZ, note_dur=0.4, sr=sr)
 
-        # Compute log-mel spectrogram as a generic feature
+        # Compute mel spectrogram and pad to 168 frequency bins
         mel = metalmom.melspectrogram(y=signal, sr=sr, n_mels=128)
-        log_mel = metalmom.power_to_db(mel)
+        log_mel = metalmom.power_to_db(mel)  # (128, n_frames)
 
-        # The CNN may expect a specific input shape -- we try a reasonable
-        # slice and reshape.  If it fails, we skip.
-        try:
-            # Try feeding the full log-mel spectrogram
-            output = predict_model(model, log_mel)
-        except RuntimeError:
-            pytest.skip(
-                "key_cnn model rejected the synthetic input shape -- "
-                "CNN input requirements differ from generic features"
-            )
+        n_frames = log_mel.shape[1]
+        # Pad frequency dim from 128 to 168
+        padded = np.zeros((168, n_frames), dtype=np.float32)
+        padded[:128, :] = log_mel
+
+        # Reshape to rank-4: (1, 1, T, 168) — (batch, channels, time, freq)
+        features = padded.T  # (n_frames, 168)
+        features_4d = features.reshape(1, 1, n_frames, 168).astype(np.float32)
+
+        output = predict_model(model, features_4d)
 
         assert output is not None
-        assert output.size > 0, "Model produced empty output"
+        assert output.size == 24, (
+            f"Expected 24 key outputs, got {output.size}"
+        )
 
 
 # ---------------------------------------------------------------------------
