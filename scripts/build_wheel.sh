@@ -76,7 +76,7 @@ echo "==> Building wheel..."
 "$PYTHON" -m build --wheel --no-isolation --outdir dist/
 
 # ---------------------------------------------------------------------------
-# Step 3: Report the result
+# Step 3: Report & validate the result
 # ---------------------------------------------------------------------------
 WHEEL=$(ls -t dist/metalmom-*.whl 2>/dev/null | head -1)
 
@@ -102,6 +102,30 @@ if unzip -l "$WHEEL" | grep -q "_lib/metalmom.h"; then
 else
     echo "    [WARN] header NOT found inside wheel!"
     exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Step 4: Fix platform tag (macOS arm64 only, stable ABI from Python 3.11)
+#
+# The wheel is built as py3-none-any but bundles a macOS arm64 dylib.
+# We use `wheel tags` to properly re-tag both the filename AND the internal
+# .dist-info/WHEEL metadata, avoiding mismatches that break PyPI/pip.
+# ---------------------------------------------------------------------------
+if ! "$PYTHON" -c "import wheel" >/dev/null 2>&1; then
+    echo "==> Installing 'wheel'..."
+    "$PYTHON" -m pip install --quiet wheel
+fi
+
+if echo "$WHEEL" | grep -q "py3-none-any"; then
+    echo "==> Re-tagging wheel for macOS arm64 stable ABI..."
+    "$PYTHON" -m wheel tags --remove \
+        --python-tag cp311 \
+        --abi-tag abi3 \
+        --platform-tag macosx_14_0_arm64 \
+        "$WHEEL"
+    # wheel tags renames the file in place; find the new one
+    WHEEL=$(ls -t dist/metalmom-*.whl 2>/dev/null | head -1)
+    echo "    [ok] re-tagged: $(basename "$WHEEL")"
 fi
 
 echo ""

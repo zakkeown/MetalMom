@@ -10,14 +10,18 @@ jobs:
     runs-on: macos-14
 
     permissions:
-      contents: write   # create GitHub Release + upload assets
+      contents: write
+      id-token: write   # sigstore OIDC
 
     env:
       HAS_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN != '' }}
+      HAS_TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN != '' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for git-cliff
 
       # ── Extract version from tag ──────────────────────────────
       - name: Extract version
@@ -35,6 +39,17 @@ jobs:
       - name: Build dylib
         run: ./scripts/build_dylib.sh
 
+      # ── XCFramework ──────────────────────────────────────────
+      - name: Build XCFramework
+        run: ./scripts/build_xcframework.sh
+
+      - name: Package XCFramework
+        run: |
+          cd .build/xcframework
+          zip -r MetalMomCore.xcframework.zip MetalMomCore.xcframework
+          shasum -a 256 MetalMomCore.xcframework.zip | cut -d ' ' -f1 > MetalMomCore.xcframework.sha256
+          echo "XCFramework checksum: $(cat MetalMomCore.xcframework.sha256)"
+
       # ── Python wheel ──────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,7 +57,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install build dependencies
-        run: pip install build hatchling
+        run: pip install build hatchling sigstore
 
       - name: Build wheel
         run: ./scripts/build_wheel.sh --no-swift
@@ -53,20 +68,58 @@ jobs:
           echo "Built: $WHEEL"
           unzip -l "$WHEEL" | grep -E "(dylib|\.h|METADATA)"
 
+      # ── Signing ───────────────────────────────────────────────
+      - name: Sign wheel
+        run: python -m sigstore sign dist/metalmom-*.whl
+
+      - name: Sign XCFramework
+        run: python -m sigstore sign .build/xcframework/MetalMomCore.xcframework.zip
+
+      # ── Changelog ─────────────────────────────────────────────
+      - name: Install git-cliff
+        run: brew install git-cliff
+
+      - name: Generate release notes
+        run: |
+          git-cliff --latest --strip header > release-notes.md || true
+          if [ ! -s release-notes.md ]; then
+            echo "First release — generating full changelog"
+            git-cliff --strip header > release-notes.md
+          fi
+
       # ── GitHub Release ────────────────────────────────────────
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
+
+          PRERELEASE_FLAG=""
+          if echo "$TAG" | grep -q "\-rc"; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
           gh release create "$TAG" \
             --title "MetalMom $TAG" \
-            --generate-notes \
-            dist/metalmom-*.whl
+            $PRERELEASE_FLAG \
+            --notes-file release-notes.md \
+            dist/metalmom-*.whl \
+            dist/*.sigstore \
+            .build/xcframework/MetalMomCore.xcframework.zip \
+            .build/xcframework/MetalMomCore.xcframework.sha256 \
+            .build/xcframework/*.sigstore
 
-      # ── PyPI (optional — requires PYPI_TOKEN secret) ──────────
+      # ── TestPyPI (for release candidates) ─────────────────────
+      - name: Publish to TestPyPI
+        if: contains(steps.version.outputs.tag, '-rc') && env.HAS_TEST_PYPI_TOKEN == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
+
+      # ── PyPI (for final releases only) ────────────────────────
       - name: Publish to PyPI
-        if: env.HAS_PYPI_TOKEN == 'true'
+        if: "!contains(steps.version.outputs.tag, '-rc') && env.HAS_PYPI_TOKEN == 'true'"
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_TOKEN }}

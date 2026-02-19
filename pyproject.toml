@@ -36,6 +36,7 @@ dependencies = [
 display = ["matplotlib>=3.7"]
 eval = ["mir_eval>=0.7"]
 dev = ["pytest>=7.0", "librosa>=0.11.0"]
+models = ["huggingface_hub>=0.20"]
 
 [project.urls]
 Homepage = "https://github.com/zakkeown/MetalMom"
