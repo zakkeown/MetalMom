@@ -178,6 +178,12 @@ def extract_gru_weights(gru_layer):
     CoreML GRU gate order: [update(z), reset(r), output(o)]
     madmom has: reset_gate, update_gate, cell
 
+    NOTE: CoreML and madmom use different GRU update equations:
+      CoreML: h = (1 - z) * candidate + z * h_prev
+      madmom: h = (1 - z) * h_prev   + z * candidate
+    The roles of z and (1-z) are swapped. The parity test accounts for
+    this by using the CoreML equation in its numpy reference pass.
+
     Returns a dict with keys:
         W_x: list of 3 arrays [W_z, W_r, W_o], each (hidden, input)
         W_h: list of 3 arrays [R_z, R_r, R_o], each (hidden, hidden)

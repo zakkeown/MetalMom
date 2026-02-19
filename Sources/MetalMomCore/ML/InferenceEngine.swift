@@ -99,20 +99,61 @@ public final class InferenceEngine: @unchecked Sendable {
         inputName: String = "input",
         outputName: String = "output"
     ) throws -> Signal {
+        // Determine the expected data type for the main input.
+        let expectedType: MLMultiArrayDataType
+        if let desc = model.modelDescription.inputDescriptionsByName[inputName],
+           let constraint = desc.multiArrayConstraint {
+            expectedType = constraint.dataType
+        } else {
+            expectedType = .float32
+        }
+
         // Build MLMultiArray from the Signal's shape and data.
         let nsShape = input.shape.map { NSNumber(value: $0) }
-        let mlArray = try MLMultiArray(shape: nsShape, dataType: .float32)
+        let mlArray = try MLMultiArray(shape: nsShape, dataType: expectedType)
 
-        // Fast copy via the MLMultiArray's mutable raw pointer.
-        let destPtr = mlArray.dataPointer.assumingMemoryBound(to: Float.self)
-        input.withUnsafeBufferPointer { src in
-            destPtr.update(from: src.baseAddress!, count: input.count)
+        // Copy data, converting from Float to the expected type.
+        if expectedType == .double {
+            let destPtr = mlArray.dataPointer.assumingMemoryBound(to: Double.self)
+            input.withUnsafeBufferPointer { src in
+                for i in 0..<input.count {
+                    destPtr[i] = Double(src[i])
+                }
+            }
+        } else {
+            let destPtr = mlArray.dataPointer.assumingMemoryBound(to: Float.self)
+            input.withUnsafeBufferPointer { src in
+                destPtr.update(from: src.baseAddress!, count: input.count)
+            }
+        }
+
+        // Build feature dictionary with the primary input.
+        var features: [String: MLFeatureValue] = [
+            inputName: MLFeatureValue(multiArray: mlArray)
+        ]
+
+        // Auto-fill any additional required inputs (e.g. hidden/cell states
+        // for recurrent models) with zero-initialized arrays.
+        for (name, desc) in model.modelDescription.inputDescriptionsByName {
+            if name == inputName { continue }
+            guard let constraint = desc.multiArrayConstraint else { continue }
+            let auxShape = constraint.shape.map { $0 }
+            let auxType = constraint.dataType
+            let auxArray = try MLMultiArray(shape: auxShape, dataType: auxType)
+            // Explicitly zero-fill the auxiliary array.
+            let auxCount = auxShape.reduce(1) { $0 * $1.intValue }
+            if auxType == .double {
+                let p = auxArray.dataPointer.assumingMemoryBound(to: Double.self)
+                for j in 0..<auxCount { p[j] = 0.0 }
+            } else {
+                let p = auxArray.dataPointer.assumingMemoryBound(to: Float.self)
+                for j in 0..<auxCount { p[j] = 0.0 }
+            }
+            features[name] = MLFeatureValue(multiArray: auxArray)
         }
 
         // Run prediction.
-        let featureProvider = try MLDictionaryFeatureProvider(
-            dictionary: [inputName: MLFeatureValue(multiArray: mlArray)]
-        )
+        let featureProvider = try MLDictionaryFeatureProvider(dictionary: features)
         let prediction: MLFeatureProvider
         do {
             prediction = try model.prediction(from: featureProvider)

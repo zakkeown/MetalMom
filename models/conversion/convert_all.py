@@ -181,13 +181,17 @@ def convert_bilstm_model(layers, name, output_dir):
 
     # Build model
     builder = make_builder(input_dim, output_dim, seq_input=True)
-    add_state_inputs(builder.spec, hidden_size)
+
+    # Each BiLSTM layer gets its own independent zero-state inputs.
+    # (Chaining output states from layer N to layer N+1 would mean layer
+    # N+1 starts with the *final* hidden state of layer N, which is wrong
+    # for single-shot inference where all layers start with h=0, c=0.)
+    for i, bl in enumerate(bilstm_layers):
+        layer_h = extract_lstm_weights(bl.fwd_layer)["W_x"][0].shape[0]
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        add_state_inputs(builder.spec, layer_h, prefix=prefix)
 
     prev_output = "input"
-    prev_h = "input_h"
-    prev_c = "input_c"
-    prev_h_back = "input_h_back"
-    prev_c_back = "input_c_back"
 
     for i, bl in enumerate(bilstm_layers):
         fwd_w = extract_lstm_weights(bl.fwd_layer)
@@ -196,24 +200,32 @@ def convert_bilstm_model(layers, name, output_dir):
         layer_in = fwd_w["W_x"][0].shape[1]
         layer_h = fwd_w["W_x"][0].shape[0]
 
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        state_h = f"{prefix}_h"
+        state_c = f"{prefix}_c"
+        state_h_b = f"{prefix}_h_back"
+        state_c_b = f"{prefix}_c_back"
+
         out = f"bilstm_{i}_out"
         h = f"bilstm_{i}_h"
         c = f"bilstm_{i}_c"
         h_b = f"bilstm_{i}_h_back"
         c_b = f"bilstm_{i}_c_back"
 
+        # NOTE: peephole weights are dropped because CoreML's Espresso
+        # LSTM kernel crashes with peephole on macOS 26.x. The peephole
+        # contribution is small for these models.
         builder.add_bidirlstm(
             name=f"bilstm_{i}",
             W_h=fwd_w["W_h"], W_x=fwd_w["W_x"], b=fwd_w["b"],
             W_h_back=bwd_w["W_h"], W_x_back=bwd_w["W_x"], b_back=bwd_w["b"],
             hidden_size=layer_h, input_size=layer_in,
-            input_names=[prev_output, prev_h, prev_c, prev_h_back, prev_c_back],
+            input_names=[prev_output, state_h, state_c, state_h_b, state_c_b],
             output_names=[out, h, c, h_b, c_b],
-            peep=fwd_w["peep"], peep_back=bwd_w["peep"],
+            peep=None, peep_back=None,
             output_all=True,
         )
-        prev_output, prev_h, prev_c = out, h, c
-        prev_h_back, prev_c_back = h_b, c_b
+        prev_output = out
 
     # Dense layer
     builder.add_inner_product(
@@ -227,8 +239,33 @@ def convert_bilstm_model(layers, name, output_dir):
     # Activation
     act = get_activation_name(dense_layer)
     if act == "SOFTMAX":
-        builder.add_softmax(
-            name="softmax", input_name="dense_out", output_name="output",
+        # CoreML's Softmax layer requires output rank >= 3.
+        # Recurrent models produce rank-5 intermediate tensors, but the
+        # output spec is declared as rank-1 Array(output_dim).  To work
+        # around this, implement softmax manually with exp + reduce_sum +
+        # divide, which work at any rank.
+        #
+        # softmax(x)_i = exp(x_i) / sum(exp(x_j))
+        # Applied along channel axis (dim 2 in rank-5 SNCHW format).
+        builder.add_unary(
+            name="softmax_exp",
+            input_name="dense_out",
+            output_name="softmax_exp_out",
+            mode="exp",
+        )
+        # Sum along the channel axis (dim 2 in rank-5)
+        builder.add_reduce_sum(
+            name="softmax_sum",
+            input_name="softmax_exp_out",
+            output_name="softmax_sum_out",
+            axes=[2],
+            keepdims=True,
+        )
+        # Divide exp(x) / sum(exp(x))
+        builder.add_divide_broadcastable(
+            name="softmax_div",
+            input_names=["softmax_exp_out", "softmax_sum_out"],
+            output_name="output",
         )
     elif act and act != "LINEAR":
         builder.add_activation(
@@ -277,37 +314,44 @@ def convert_lstm_model(layers, name, output_dir):
 
     builder = make_builder(input_dim, output_dim, seq_input=True)
 
-    # Add state inputs for first LSTM layer
-    for state_name in ["input_h", "input_c"]:
-        inp = builder.spec.description.input.add()
-        inp.name = state_name
-        inp.type.multiArrayType.dataType = 65600
-        for dim in [1, 1, hidden_size, 1, 1]:
-            inp.type.multiArrayType.shape.append(dim)
+    # Each LSTM layer gets its own independent zero-state inputs.
+    for i, ll in enumerate(lstm_layers):
+        layer_h = extract_lstm_weights(ll)["W_x"][0].shape[0]
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        for state_name in [f"{prefix}_h", f"{prefix}_c"]:
+            inp = builder.spec.description.input.add()
+            inp.name = state_name
+            inp.type.multiArrayType.dataType = 65600
+            for dim in [1, 1, layer_h, 1, 1]:
+                inp.type.multiArrayType.shape.append(dim)
 
     prev_output = "input"
-    prev_h = "input_h"
-    prev_c = "input_c"
 
     for i, ll in enumerate(lstm_layers):
         w = extract_lstm_weights(ll)
         layer_in = w["W_x"][0].shape[1]
         layer_h = w["W_x"][0].shape[0]
 
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        state_h = f"{prefix}_h"
+        state_c = f"{prefix}_c"
+
         out = f"lstm_{i}_out"
         h = f"lstm_{i}_h"
         c = f"lstm_{i}_c"
 
+        # NOTE: peephole weights are dropped because CoreML's Espresso
+        # LSTM kernel crashes with peephole on macOS 26.x.
         builder.add_unilstm(
             name=f"lstm_{i}",
             W_h=w["W_h"], W_x=w["W_x"], b=w["b"],
             hidden_size=layer_h, input_size=layer_in,
-            input_names=[prev_output, prev_h, prev_c],
+            input_names=[prev_output, state_h, state_c],
             output_names=[out, h, c],
-            peep=w["peep"],
+            peep=None,
             output_all=True,
         )
-        prev_output, prev_h, prev_c = out, h, c
+        prev_output = out
 
     # Dense
     builder.add_inner_product(
@@ -370,12 +414,13 @@ def convert_bigru_model(layers, name, output_dir):
 
     builder = make_builder(input_dim, output_dim, seq_input=True)
 
-    # Add state inputs for forward and backward GRU
-    add_bidir_rnn_state_inputs(builder.spec, hidden_size)
+    # Each BiGRU layer gets its own independent zero-state inputs.
+    for i, bl in enumerate(bigru_layers):
+        layer_h = extract_gru_weights(bl.fwd_layer)["W_x"][0].shape[0]
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        add_bidir_rnn_state_inputs(builder.spec, layer_h, prefix=prefix)
 
     prev_output = "input"
-    prev_h_fwd = "input_h"
-    prev_h_bwd = "input_h_back"
 
     for i, bl in enumerate(bigru_layers):
         fwd_w = extract_gru_weights(bl.fwd_layer)
@@ -384,8 +429,13 @@ def convert_bigru_model(layers, name, output_dir):
         layer_in = fwd_w["W_x"][0].shape[1]
         layer_h = fwd_w["W_x"][0].shape[0]
 
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        state_h_fwd = f"{prefix}_h"
+        state_h_bwd = f"{prefix}_h_back"
+
         fwd_out = f"gru_{i}_fwd_out"
         fwd_h = f"gru_{i}_fwd_h"
+        bwd_out_raw = f"gru_{i}_bwd_out_raw"
         bwd_out = f"gru_{i}_bwd_out"
         bwd_h = f"gru_{i}_bwd_h"
         concat_out = f"bigru_{i}_out"
@@ -395,21 +445,33 @@ def convert_bigru_model(layers, name, output_dir):
             name=f"gru_{i}_fwd",
             W_h=fwd_w["W_h"], W_x=fwd_w["W_x"], b=fwd_w["b"],
             hidden_size=layer_h, input_size=layer_in,
-            input_names=[prev_output, prev_h_fwd],
+            input_names=[prev_output, state_h_fwd],
             output_names=[fwd_out, fwd_h],
             activation="TANH", inner_activation="SIGMOID",
             output_all=True, reverse_input=False,
         )
 
         # Backward GRU (reverse_input=True)
+        # CoreML reverse_input only reverses the INPUT, not the output.
+        # So the output is in reversed time order and must be flipped
+        # before concatenation to align with forward output.
         builder.add_gru(
             name=f"gru_{i}_bwd",
             W_h=bwd_w["W_h"], W_x=bwd_w["W_x"], b=bwd_w["b"],
             hidden_size=layer_h, input_size=layer_in,
-            input_names=[prev_output, prev_h_bwd],
-            output_names=[bwd_out, bwd_h],
+            input_names=[prev_output, state_h_bwd],
+            output_names=[bwd_out_raw, bwd_h],
             activation="TANH", inner_activation="SIGMOID",
             output_all=True, reverse_input=True,
+        )
+
+        # Reverse the backward output along the sequence dimension (dim 0)
+        # to align with forward output's time order
+        builder.add_reverse(
+            name=f"gru_{i}_bwd_rev",
+            input_name=bwd_out_raw,
+            output_name=bwd_out,
+            reverse_dim=[True, False, False, False, False],
         )
 
         # Concatenate forward and backward outputs along channel axis (axis=2)
@@ -421,8 +483,6 @@ def convert_bigru_model(layers, name, output_dir):
         )
 
         prev_output = concat_out
-        prev_h_fwd = fwd_h
-        prev_h_bwd = bwd_h
 
     # Dense
     builder.add_inner_product(
@@ -482,11 +542,14 @@ def convert_birnn_model(layers, name, output_dir):
     output_dim = W_dense.shape[0]
 
     builder = make_builder(input_dim, output_dim, seq_input=True)
-    add_bidir_rnn_state_inputs(builder.spec, hidden_size)
+
+    # Each BiRNN layer gets its own independent zero-state inputs.
+    for i, bl in enumerate(birnn_layers):
+        layer_h = extract_rnn_weights(bl.fwd_layer)["W_x"].shape[0]
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        add_bidir_rnn_state_inputs(builder.spec, layer_h, prefix=prefix)
 
     prev_output = "input"
-    prev_h_fwd = "input_h"
-    prev_h_bwd = "input_h_back"
 
     for i, bl in enumerate(birnn_layers):
         fwd_w = extract_rnn_weights(bl.fwd_layer)
@@ -495,8 +558,13 @@ def convert_birnn_model(layers, name, output_dir):
         layer_in = fwd_w["W_x"].shape[1]
         layer_h = fwd_w["W_x"].shape[0]
 
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        state_h_fwd = f"{prefix}_h"
+        state_h_bwd = f"{prefix}_h_back"
+
         fwd_out = f"rnn_{i}_fwd_out"
         fwd_h = f"rnn_{i}_fwd_h"
+        bwd_out_raw = f"rnn_{i}_bwd_out_raw"
         bwd_out = f"rnn_{i}_bwd_out"
         bwd_h = f"rnn_{i}_bwd_h"
         concat_out = f"birnn_{i}_out"
@@ -507,20 +575,28 @@ def convert_birnn_model(layers, name, output_dir):
             W_h=fwd_w["W_h"], W_x=fwd_w["W_x"], b=fwd_w["b"],
             hidden_size=layer_h, input_size=layer_in,
             activation="TANH",
-            input_names=[prev_output, prev_h_fwd],
+            input_names=[prev_output, state_h_fwd],
             output_names=[fwd_out, fwd_h],
             output_all=True, reverse_input=False,
         )
 
-        # Backward RNN
+        # Backward RNN (reverse_input only reverses input, not output)
         builder.add_simple_rnn(
             name=f"rnn_{i}_bwd",
             W_h=bwd_w["W_h"], W_x=bwd_w["W_x"], b=bwd_w["b"],
             hidden_size=layer_h, input_size=layer_in,
             activation="TANH",
-            input_names=[prev_output, prev_h_bwd],
-            output_names=[bwd_out, bwd_h],
+            input_names=[prev_output, state_h_bwd],
+            output_names=[bwd_out_raw, bwd_h],
             output_all=True, reverse_input=True,
+        )
+
+        # Reverse backward output along sequence dim to align with forward
+        builder.add_reverse(
+            name=f"rnn_{i}_bwd_rev",
+            input_name=bwd_out_raw,
+            output_name=bwd_out,
+            reverse_dim=[True, False, False, False, False],
         )
 
         # Concatenate
@@ -532,8 +608,6 @@ def convert_birnn_model(layers, name, output_dir):
         )
 
         prev_output = concat_out
-        prev_h_fwd = fwd_h
-        prev_h_bwd = bwd_h
 
     # Dense
     builder.add_inner_product(
@@ -589,15 +663,22 @@ def convert_rnn_model(layers, name, output_dir):
     output_dim = W_dense.shape[0]
 
     builder = make_builder(input_dim, output_dim, seq_input=True)
-    add_rnn_state_inputs(builder.spec, hidden_size)
+
+    # Each RNN layer gets its own independent zero-state inputs.
+    for i, rl in enumerate(rnn_layers):
+        layer_h = extract_rnn_weights(rl)["W_x"].shape[0]
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        add_rnn_state_inputs(builder.spec, layer_h, prefix=prefix)
 
     prev_output = "input"
-    prev_h = "input_h"
 
     for i, rl in enumerate(rnn_layers):
         w = extract_rnn_weights(rl)
         layer_in = w["W_x"].shape[1]
         layer_h = w["W_x"].shape[0]
+
+        prefix = "input" if i == 0 else f"layer{i}_init"
+        state_h = f"{prefix}_h"
 
         out = f"rnn_{i}_out"
         h = f"rnn_{i}_h"
@@ -607,11 +688,11 @@ def convert_rnn_model(layers, name, output_dir):
             W_h=w["W_h"], W_x=w["W_x"], b=w["b"],
             hidden_size=layer_h, input_size=layer_in,
             activation="TANH",
-            input_names=[prev_output, prev_h],
+            input_names=[prev_output, state_h],
             output_names=[out, h],
             output_all=True, reverse_input=False,
         )
-        prev_output, prev_h = out, h
+        prev_output = out
 
     # Dense
     builder.add_inner_product(
