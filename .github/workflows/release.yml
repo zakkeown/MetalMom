@@ -109,17 +109,20 @@ jobs:
             .build/xcframework/MetalMomCore.xcframework.sha256 \
             .build/xcframework/*.sigstore.json
 
-      # ── TestPyPI (for release candidates) ─────────────────────
+      # ── PyPI upload via twine (pypa/gh-action-pypi-publish requires Linux) ──
+      - name: Install twine
+        run: pip install twine
+
       - name: Publish to TestPyPI
         if: contains(steps.version.outputs.tag, '-rc') && env.HAS_TEST_PYPI_TOKEN == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository-url: https://test.pypi.org/legacy/
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
+        run: twine upload --repository-url https://test.pypi.org/legacy/ dist/metalmom-*.whl
 
-      # ── PyPI (for final releases only) ────────────────────────
       - name: Publish to PyPI
         if: "!contains(steps.version.outputs.tag, '-rc') && env.HAS_PYPI_TOKEN == 'true'"
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_TOKEN }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: twine upload dist/metalmom-*.whl
