@@ -104,10 +104,10 @@ jobs:
             $PRERELEASE_FLAG \
             --notes-file release-notes.md \
             dist/metalmom-*.whl \
-            dist/*.sigstore \
+            dist/*.sigstore.json \
             .build/xcframework/MetalMomCore.xcframework.zip \
             .build/xcframework/MetalMomCore.xcframework.sha256 \
-            .build/xcframework/*.sigstore
+            .build/xcframework/*.sigstore.json
 
       # ── TestPyPI (for release candidates) ─────────────────────
       - name: Publish to TestPyPI
