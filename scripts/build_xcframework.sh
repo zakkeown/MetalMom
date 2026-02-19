@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/.build/xcframework"
+DERIVED_DATA="$BUILD_DIR/DerivedData"
 
 echo "Building MetalMom XCFramework..."
 cd "$PROJECT_DIR"
@@ -12,83 +13,88 @@ cd "$PROJECT_DIR"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-# Archive for iOS device
-echo "Archiving for iOS device (arm64)..."
-xcodebuild archive \
+# ---------------------------------------------------------------------------
+# SPM packages built via `xcodebuild archive` produce .o object files, not
+# .framework bundles.  Using `xcodebuild build` instead generates proper
+# PackageFrameworks/<Name>.framework output that xcodebuild -create-xcframework
+# can consume.
+# ---------------------------------------------------------------------------
+
+# Build for iOS device
+echo "Building for iOS device (arm64)..."
+xcodebuild build \
     -scheme MetalMomCore \
     -destination "generic/platform=iOS" \
-    -archivePath "$BUILD_DIR/MetalMomCore-iOS.xcarchive" \
+    -derivedDataPath "$DERIVED_DATA/ios" \
     -skipPackagePluginValidation \
-    SKIP_INSTALL=NO \
-    BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+    BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+    ONLY_ACTIVE_ARCH=NO
 
-# Archive for iOS Simulator
-echo "Archiving for iOS Simulator..."
-xcodebuild archive \
+# Build for iOS Simulator
+echo "Building for iOS Simulator..."
+xcodebuild build \
     -scheme MetalMomCore \
     -destination "generic/platform=iOS Simulator" \
-    -archivePath "$BUILD_DIR/MetalMomCore-iOSSimulator.xcarchive" \
+    -derivedDataPath "$DERIVED_DATA/sim" \
     -skipPackagePluginValidation \
-    SKIP_INSTALL=NO \
-    BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+    BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+    ONLY_ACTIVE_ARCH=NO
 
-# Archive for macOS
-echo "Archiving for macOS..."
-xcodebuild archive \
+# Build for macOS
+echo "Building for macOS..."
+xcodebuild build \
     -scheme MetalMomCore \
     -destination "generic/platform=macOS" \
-    -archivePath "$BUILD_DIR/MetalMomCore-macOS.xcarchive" \
+    -derivedDataPath "$DERIVED_DATA/mac" \
     -skipPackagePluginValidation \
-    SKIP_INSTALL=NO \
-    BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+    BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+    ONLY_ACTIVE_ARCH=NO
 
-# Find the framework or library in each archive.
-# SPM packages produce PackageFrameworks/<Name>.framework inside the archive,
-# not the standard Products/Library/Frameworks/ path.
-find_framework_or_library() {
-    local ARCHIVE="$1"
+# ---------------------------------------------------------------------------
+# Locate the .framework bundles in DerivedData.
+# SPM puts them under Build/Products/<Config>-<sdk>/PackageFrameworks/
+# ---------------------------------------------------------------------------
+find_framework() {
+    local DD="$1"
     local NAME="$2"
 
-    # Try standard framework path
-    local FW="$ARCHIVE/Products/Library/Frameworks/${NAME}.framework"
-    if [ -d "$FW" ]; then
-        echo "-framework" "$FW"
-        return
-    fi
-
-    # Try SPM PackageFrameworks path (inside Products)
-    FW=$(find "$ARCHIVE" -path "*/PackageFrameworks/${NAME}.framework" -type d | head -1)
+    local FW
+    FW=$(find -L "$DD" -path "*/PackageFrameworks/${NAME}.framework" -type d 2>/dev/null | head -1)
     if [ -n "$FW" ]; then
-        echo "-framework" "$FW"
+        echo "$FW"
         return
     fi
 
-    # Try static library path
-    local LIB=$(find "$ARCHIVE" -name "lib${NAME}.a" -type f | head -1)
-    if [ -n "$LIB" ]; then
-        echo "-library" "$LIB"
+    # Fallback: search for any .framework with the right name
+    FW=$(find -L "$DD" -name "${NAME}.framework" -type d 2>/dev/null | head -1)
+    if [ -n "$FW" ]; then
+        echo "$FW"
         return
     fi
 
-    echo "ERROR: Could not find framework or library for ${NAME} in ${ARCHIVE}" >&2
+    echo "ERROR: Could not find ${NAME}.framework in ${DD}" >&2
+    echo "Contents of DerivedData:" >&2
+    find -L "$DD" -name "*.framework" -type d 2>/dev/null >&2 || true
     exit 1
 }
 
+IOS_FW=$(find_framework "$DERIVED_DATA/ios" "MetalMomCore")
+SIM_FW=$(find_framework "$DERIVED_DATA/sim" "MetalMomCore")
+MAC_FW=$(find_framework "$DERIVED_DATA/mac" "MetalMomCore")
+
+echo ""
+echo "Found frameworks:"
+echo "  iOS:       $IOS_FW"
+echo "  Simulator: $SIM_FW"
+echo "  macOS:     $MAC_FW"
+
 # Create XCFramework
+echo ""
 echo "Creating XCFramework..."
-
-IOS_ARGS=$(find_framework_or_library "$BUILD_DIR/MetalMomCore-iOS.xcarchive" "MetalMomCore")
-SIM_ARGS=$(find_framework_or_library "$BUILD_DIR/MetalMomCore-iOSSimulator.xcarchive" "MetalMomCore")
-MAC_ARGS=$(find_framework_or_library "$BUILD_DIR/MetalMomCore-macOS.xcarchive" "MetalMomCore")
-
-echo "  iOS:       $IOS_ARGS"
-echo "  Simulator: $SIM_ARGS"
-echo "  macOS:     $MAC_ARGS"
-
 xcodebuild -create-xcframework \
-    $IOS_ARGS \
-    $SIM_ARGS \
-    $MAC_ARGS \
+    -framework "$IOS_FW" \
+    -framework "$SIM_FW" \
+    -framework "$MAC_FW" \
     -output "$BUILD_DIR/MetalMomCore.xcframework"
 
 echo ""
