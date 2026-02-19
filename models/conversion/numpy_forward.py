@@ -579,3 +579,504 @@ def stride_forward(x, stride_layer):
     """
     batch = x.shape[0]
     return x.reshape(batch, -1)
+
+
+# ---------------------------------------------------------------------------
+# Full-model forward pass dispatcher
+# ---------------------------------------------------------------------------
+
+import os as _os
+import sys as _sys
+
+_this_dir = _os.path.dirname(_os.path.abspath(__file__))
+if _this_dir not in _sys.path:
+    _sys.path.insert(0, _this_dir)
+from madmom_loader import classify_model, layer_type_name  # noqa: E402
+
+
+def _detect_input_dim(model_type, layers):
+    """
+    Detect the input dimension from the first layer's weights.
+
+    Parameters
+    ----------
+    model_type : str
+        One of 'bilstm', 'lstm', 'bigru', 'birnn', 'rnn', 'cnn', 'dnn'.
+    layers : list
+        List of madmom layer stubs.
+
+    Returns
+    -------
+    int
+        The input feature dimension expected by the first layer.
+    """
+    first = layers[0]
+    name = layer_type_name(first)
+
+    if name == "BidirectionalLayer":
+        fwd = first.fwd_layer
+        sub_name = layer_type_name(fwd)
+        if sub_name == "LSTMLayer":
+            return fwd.input_gate.weights.shape[0]
+        elif sub_name == "GRULayer":
+            return fwd.reset_gate.weights.shape[0]
+        elif sub_name == "RecurrentLayer":
+            return fwd.weights.shape[0]
+        else:
+            raise ValueError(f"Unknown bidirectional sublayer: {sub_name}")
+
+    elif name == "LSTMLayer":
+        return first.input_gate.weights.shape[0]
+
+    elif name == "RecurrentLayer":
+        return first.weights.shape[0]
+
+    elif name == "FeedForwardLayer":
+        return first.weights.shape[0]
+
+    elif name in ("ConvolutionalLayer", "BatchNormLayer", "PadLayer"):
+        # CNN: find the first ConvolutionalLayer to get in_channels
+        for layer in layers:
+            if layer_type_name(layer) == "ConvolutionalLayer":
+                return layer.weights.shape[0]  # in_channels
+        raise ValueError("CNN model has no ConvolutionalLayer")
+
+    else:
+        raise ValueError(f"Cannot detect input dim for layer type: {name}")
+
+
+# -- recurrent model runner -------------------------------------------------
+
+_RECURRENT_TYPES = {"BidirectionalLayer", "LSTMLayer", "RecurrentLayer"}
+
+
+def _recurrent_fn_for_layer(layer):
+    """Return the correct forward function for a single recurrent layer."""
+    name = layer_type_name(layer)
+
+    if name == "BidirectionalLayer":
+        from madmom_loader import detect_rnn_sublayer_type
+        sub = detect_rnn_sublayer_type(layer)
+        if sub == "lstm":
+            return bilstm_forward
+        elif sub == "gru":
+            return bigru_forward
+        elif sub == "rnn":
+            return birnn_forward
+        else:
+            raise ValueError(f"Unknown bidirectional sublayer type: {sub}")
+
+    elif name == "LSTMLayer":
+        return lstm_forward
+
+    elif name == "RecurrentLayer":
+        return rnn_forward
+
+    else:
+        raise ValueError(f"Not a recurrent layer: {name}")
+
+
+def _run_recurrent_model(layers, seq_len=100):
+    """
+    Run a recurrent model (N recurrent layers + trailing dense layers).
+
+    Parameters
+    ----------
+    layers : list
+        Layer stubs from a recurrent madmom model.
+    seq_len : int
+        Number of time steps in the synthetic input.
+
+    Returns
+    -------
+    np.ndarray, shape (seq_len_out, output_dim)
+        Output of the final dense layer.
+    """
+    # Separate recurrent layers from dense layers
+    recurrent_layers = []
+    dense_layers = []
+    for layer in layers:
+        name = layer_type_name(layer)
+        if name in _RECURRENT_TYPES:
+            recurrent_layers.append(layer)
+        elif name == "FeedForwardLayer":
+            dense_layers.append(layer)
+        else:
+            raise ValueError(f"Unexpected layer in recurrent model: {name}")
+
+    # Detect input dimension from the first recurrent layer
+    input_dim = _detect_input_dim("recurrent", layers)
+
+    # Generate random input
+    x = np.random.randn(seq_len, input_dim).astype(np.float32) * 0.1
+
+    # Run through recurrent layers
+    for layer in recurrent_layers:
+        fn = _recurrent_fn_for_layer(layer)
+        x = fn(x, layer)
+
+    # Run through dense layers
+    for layer in dense_layers:
+        x = dense_forward(x, layer)
+
+    return x
+
+
+# -- CNN model runner --------------------------------------------------------
+
+def _run_cnn_model(layers, seq_len=15):
+    """
+    Run a CNN model through its full layer stack.
+
+    Handles three madmom CNN variants:
+      - onsets_cnn: BN(3D) -> Conv -> Pool -> Conv -> Pool -> Stride -> Dense
+      - key_cnn: Pad/Conv/BN/Pool blocks -> AveragePool (no dense)
+      - chords_cnnfeat: Conv/BN/Pool blocks (no dense, no avg pool)
+
+    Parameters
+    ----------
+    layers : list
+        Layer stubs from a CNN madmom model.
+    seq_len : int
+        Number of time frames in the synthetic input.
+
+    Returns
+    -------
+    np.ndarray
+        Output array (shape depends on model architecture).
+    """
+    # Detect whether this is a 3D-BN onset model or a standard 4D CNN
+    first_name = layer_type_name(layers[0])
+
+    if first_name == "BatchNormLayer" and layers[0].mean.ndim == 2:
+        # Onsets CNN: BN operates on 3D input (T, H, C) then reshapes to 4D
+        return _run_onsets_cnn(layers, seq_len)
+    else:
+        # Standard 4D CNN (key, chords)
+        return _run_standard_cnn(layers, seq_len)
+
+
+def _run_onsets_cnn(layers, seq_len):
+    """
+    Run the onsets CNN model.
+
+    The onsets CNN has a special structure:
+      1. Input is 3D: (T, 80, 3) — T frames, 80 freq bins, 3 spectrograms
+      2. BatchNorm normalizes this 3D input (mean shape is (80, 3))
+      3. Reshaped to 4D: (1, 3, T, 80) for convolution
+      4. Conv/Pool layers process in 4D
+      5. Reshape back to 2D for StrideLayer and Dense layers
+    """
+    bn_layer = layers[0]
+    freq_bins = bn_layer.mean.shape[0]  # 80
+    num_specs = bn_layer.mean.shape[1]  # 3
+
+    # Generate 3D input
+    x = np.random.randn(seq_len, freq_bins, num_specs).astype(np.float32) * 0.1
+
+    # Apply BN on 3D data (element-wise, broadcasts over T)
+    mean = np.asarray(bn_layer.mean).astype(np.float32)
+    inv_std = np.asarray(bn_layer.inv_std).astype(np.float32)
+    gamma_raw = getattr(bn_layer, "gamma", 1)
+    beta_raw = getattr(bn_layer, "beta", 0)
+    gamma = np.broadcast_to(
+        np.asarray(gamma_raw).astype(np.float32).flatten(),
+        (freq_bins * num_specs,),
+    ).copy().reshape(freq_bins, num_specs)
+    beta = np.broadcast_to(
+        np.asarray(beta_raw).astype(np.float32).flatten(),
+        (freq_bins * num_specs,),
+    ).copy().reshape(freq_bins, num_specs)
+    x = gamma * (x - mean) * inv_std + beta
+
+    # Reshape to 4D: (1, channels=num_specs, T, freq_bins)
+    # (T, 80, 3) -> transpose to (T, 3, 80) -> reshape to (1, 3, T, 80)
+    x = x.transpose(0, 2, 1)  # (T, 3, 80)
+    x = x.reshape(1, num_specs, seq_len, freq_bins)  # (1, 3, T, 80)
+
+    # Process remaining layers
+    for layer in layers[1:]:
+        name = layer_type_name(layer)
+        if name == "ConvolutionalLayer":
+            x = conv2d_forward(x, layer)
+        elif name == "BatchNormLayer":
+            x = batchnorm_forward(x, layer)
+        elif name == "MaxPoolLayer":
+            x = maxpool_forward(x, layer)
+        elif name == "StrideLayer":
+            # Reshape 4D to 2D: (1, C, H, W) -> (H, C*W)
+            # The time dimension is H (axis 2)
+            batch, C, H, W = x.shape
+            x = x.transpose(0, 2, 1, 3).reshape(H, C * W)  # (H, C*W)
+            # Apply stride: sliding window over time
+            block_size = int(layer.block_size)
+            T_out = H - block_size + 1
+            features = x.shape[1]
+            from numpy.lib.stride_tricks import as_strided
+            out = as_strided(
+                x,
+                shape=(T_out, features * block_size),
+                strides=(x.strides[0], x.strides[1]),
+            )
+            x = np.array(out)  # copy to own memory
+        elif name == "FeedForwardLayer":
+            x = dense_forward(x, layer)
+        else:
+            raise ValueError(f"Unexpected layer in onsets CNN: {name}")
+
+    return x
+
+
+def _run_standard_cnn(layers, seq_len):
+    """
+    Run a standard 4D CNN model (key_cnn, chords_cnnfeat).
+
+    Input is (1, in_channels, H, W) throughout the conv/bn/pool stack.
+    If the model ends with AverageLayer, global average pooling is applied.
+    If dense layers follow, the tensor is flattened to 2D first.
+    """
+    # Find first conv layer to determine input shape
+    first_conv = None
+    for layer in layers:
+        if layer_type_name(layer) == "ConvolutionalLayer":
+            first_conv = layer
+            break
+
+    if first_conv is None:
+        raise ValueError("No ConvolutionalLayer found in CNN model")
+
+    in_channels = first_conv.weights.shape[0]
+
+    # Determine spatial dimensions from the model structure
+    # Use a reasonable default based on typical madmom CNN inputs
+    # key_cnn: (1, 1, T, 168) — 168 log-freq bins
+    # chords_cnnfeat: (1, 1, T, 105) — 105 semitone bins
+    # Detect from layer structure: trace forward to find what works
+    freq_dim = _detect_cnn_freq_dim(layers, in_channels, seq_len)
+
+    x = np.random.randn(1, in_channels, seq_len, freq_dim).astype(np.float32) * 0.1
+
+    for layer in layers:
+        name = layer_type_name(layer)
+        if name == "PadLayer":
+            x = pad_forward(x, layer)
+        elif name == "ConvolutionalLayer":
+            x = conv2d_forward(x, layer)
+        elif name == "BatchNormLayer":
+            x = batchnorm_forward(x, layer)
+        elif name == "MaxPoolLayer":
+            x = maxpool_forward(x, layer)
+        elif name == "AverageLayer":
+            x = average_forward(x)
+        elif name == "StrideLayer":
+            x = stride_forward(x, layer)
+        elif name == "FeedForwardLayer":
+            # Flatten to 2D if still 4D
+            if x.ndim == 4:
+                x = x.reshape(x.shape[0], -1)
+            x = dense_forward(x, layer)
+        else:
+            raise ValueError(f"Unexpected layer in CNN: {name}")
+
+    # If output is still 4D, flatten to 2D
+    if x.ndim == 4:
+        x = x.reshape(x.shape[0], -1)
+
+    return x
+
+
+def _detect_cnn_freq_dim(layers, in_channels, seq_len):
+    """
+    Detect the frequency (W) dimension needed for a standard CNN.
+
+    Traces the layer stack symbolically to find a W that produces valid
+    spatial dimensions throughout. Works backwards from the last conv layer's
+    kernel size requirements or from a known dense layer input size.
+    """
+    # Try common madmom frequency dimensions
+    # key_cnn uses 168 bins, chords uses 105 bins
+    candidates = [168, 105, 128, 80, 64, 48, 256]
+
+    for freq in candidates:
+        try:
+            h, w = seq_len, freq
+            valid = True
+            for layer in layers:
+                name = layer_type_name(layer)
+                if name == "PadLayer":
+                    p = int(layer.width)
+                    h += 2 * p
+                    w += 2 * p
+                elif name == "ConvolutionalLayer":
+                    wt = layer.weights
+                    kH, kW = wt.shape[2], wt.shape[3]
+                    stride = getattr(layer, "stride", 1)
+                    sH = sW = int(stride) if not hasattr(stride, "__len__") else int(stride[0])
+                    if hasattr(stride, "__len__") and len(stride) > 1:
+                        sW = int(stride[1])
+                    h = (h - kH) // sH + 1
+                    w = (w - kW) // sW + 1
+                    if h < 1 or w < 1:
+                        valid = False
+                        break
+                elif name == "BatchNormLayer":
+                    pass
+                elif name == "MaxPoolLayer":
+                    size = layer.size
+                    stride = layer.stride
+                    if hasattr(size, "__len__"):
+                        pH, pW = int(size[0]), int(size[1])
+                    else:
+                        pH = pW = int(size)
+                    if hasattr(stride, "__len__"):
+                        sH, sW = int(stride[0]), int(stride[1])
+                    else:
+                        sH = sW = int(stride)
+                    h = (h - pH) // sH + 1
+                    w = (w - pW) // sW + 1
+                    if h < 1 or w < 1:
+                        valid = False
+                        break
+                elif name == "AverageLayer":
+                    h, w = 1, 1
+                elif name in ("StrideLayer", "FeedForwardLayer"):
+                    break  # past spatial layers
+            if valid:
+                return freq
+        except Exception:
+            continue
+
+    # Fallback: use 80
+    return 80
+
+
+# -- DNN model runner --------------------------------------------------------
+
+def _run_dnn_model(layers, seq_len=100):
+    """
+    Run a DNN (dense-only) model.
+
+    Parameters
+    ----------
+    layers : list
+        FeedForwardLayer stubs.
+    seq_len : int
+        Number of input samples.
+
+    Returns
+    -------
+    np.ndarray, shape (seq_len, output_dim)
+    """
+    input_dim = _detect_input_dim("dnn", layers)
+    x = np.random.randn(seq_len, input_dim).astype(np.float32) * 0.1
+
+    for layer in layers:
+        name = layer_type_name(layer)
+        if name == "FeedForwardLayer":
+            x = dense_forward(x, layer)
+        else:
+            raise ValueError(f"Unexpected layer in DNN: {name}")
+
+    return x
+
+
+# -- main dispatcher ---------------------------------------------------------
+
+def run_model_forward(model, seq_len=100):
+    """
+    Classify a loaded madmom model and run its full forward pass.
+
+    Parameters
+    ----------
+    model : object
+        A madmom model loaded via ``SafeUnpickler`` / ``load_model()``.
+    seq_len : int
+        Number of time steps for the synthetic input sequence.
+        For CNN models this is the time dimension; for recurrent/DNN models
+        this is the number of frames.
+
+    Returns
+    -------
+    np.ndarray or None
+        The output array from the forward pass. Returns None for CRF models
+        (which have no neural forward pass).
+    """
+    model_type, data = classify_model(model)
+
+    if model_type == "crf":
+        return None
+
+    if model_type in ("bilstm", "lstm", "bigru", "birnn", "rnn"):
+        return _run_recurrent_model(data, seq_len=seq_len)
+
+    if model_type == "cnn":
+        return _run_cnn_model(data, seq_len=seq_len)
+
+    if model_type == "dnn":
+        return _run_dnn_model(data, seq_len=seq_len)
+
+    raise ValueError(f"Unknown model type: {model_type}")
+
+
+def generate_golden(model, seq_len=100, seed=42):
+    """
+    Generate a deterministic (input, output) pair for golden-file validation.
+
+    Seeds the numpy RNG before running the forward pass, then re-seeds and
+    re-generates the same input to return both the input and the output.
+
+    Parameters
+    ----------
+    model : object
+        A madmom model loaded via ``SafeUnpickler`` / ``load_model()``.
+    seq_len : int
+        Number of time steps in the synthetic input.
+    seed : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    (np.ndarray, np.ndarray) or (None, None)
+        (input_array, output_array). Returns (None, None) for CRF models.
+    """
+    model_type, data = classify_model(model)
+
+    if model_type == "crf":
+        return None, None
+
+    # Run forward pass with seeded RNG
+    np.random.seed(seed)
+    output = run_model_forward(model, seq_len=seq_len)
+
+    # Re-seed and regenerate the same input
+    np.random.seed(seed)
+
+    if model_type in ("bilstm", "lstm", "bigru", "birnn", "rnn"):
+        input_dim = _detect_input_dim(model_type, data)
+        input_arr = np.random.randn(seq_len, input_dim).astype(np.float32) * 0.1
+    elif model_type == "dnn":
+        input_dim = _detect_input_dim(model_type, data)
+        input_arr = np.random.randn(seq_len, input_dim).astype(np.float32) * 0.1
+    elif model_type == "cnn":
+        first_name = layer_type_name(data[0])
+        if first_name == "BatchNormLayer" and data[0].mean.ndim == 2:
+            freq_bins = data[0].mean.shape[0]
+            num_specs = data[0].mean.shape[1]
+            input_arr = np.random.randn(seq_len, freq_bins, num_specs).astype(
+                np.float32
+            ) * 0.1
+        else:
+            first_conv = None
+            for layer in data:
+                if layer_type_name(layer) == "ConvolutionalLayer":
+                    first_conv = layer
+                    break
+            in_channels = first_conv.weights.shape[0]
+            freq_dim = _detect_cnn_freq_dim(data, in_channels, seq_len)
+            input_arr = np.random.randn(1, in_channels, seq_len, freq_dim).astype(
+                np.float32
+            ) * 0.1
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    return input_arr, output
