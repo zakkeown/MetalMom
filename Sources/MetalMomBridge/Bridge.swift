@@ -3645,6 +3645,51 @@ public func mm_semitone_frequencies(
     return fillBuffer(signal, out)
 }
 
+// MARK: - Model Prediction
+
+@_cdecl("mm_model_predict")
+public func mm_model_predict(
+    _ ctx: UnsafeMutableRawPointer?,
+    _ modelPath: UnsafePointer<CChar>?,
+    _ inputData: UnsafePointer<Float>?,
+    _ inputShape: UnsafePointer<Int32>?,
+    _ inputShapeLen: Int32,
+    _ inputCount: Int32,
+    _ out: UnsafeMutablePointer<MMBuffer>?
+) -> Int32 {
+    guard let modelPath = modelPath,
+          let inputData = inputData,
+          let inputShape = inputShape,
+          inputShapeLen > 0,
+          inputCount > 0,
+          let out = out else {
+        return MM_ERR_INVALID_INPUT
+    }
+
+    let pathStr = String(cString: modelPath)
+    let url = URL(fileURLWithPath: pathStr)
+
+    // Build shape array
+    let shapeArray = (0..<Int(inputShapeLen)).map { Int(inputShape[$0]) }
+
+    // Copy input data
+    let dataArray = Array(UnsafeBufferPointer(start: inputData, count: Int(inputCount)))
+
+    do {
+        let engine: InferenceEngine
+        if pathStr.hasSuffix(".mlmodelc") {
+            engine = try InferenceEngine(compiledModelURL: url, computeUnits: .cpuOnly)
+        } else {
+            engine = try InferenceEngine(sourceModelURL: url, computeUnits: .cpuOnly)
+        }
+
+        let result = try engine.predict(data: dataArray, shape: shapeArray)
+        return fillBuffer(result, out)
+    } catch {
+        return MM_ERR_INTERNAL
+    }
+}
+
 // MARK: - Memory
 
 @_cdecl("mm_buffer_free")

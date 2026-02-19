@@ -12,6 +12,7 @@ ffi.cdef("""
     #define MM_ERR_INVALID_INPUT -1
     #define MM_ERR_METAL_UNAVAILABLE -2
     #define MM_ERR_ALLOC_FAILED -3
+    #define MM_ERR_INTERNAL -4
 
     /* Buffer type: holds data + shape for NumPy interop */
     typedef struct {
@@ -487,6 +488,15 @@ ffi.cdef("""
                                     int32_t order, MMBuffer* out);
     int32_t mm_semitone_frequencies(mm_context ctx, int32_t midi_low, int32_t midi_high,
                                      MMBuffer* out);
+
+    /* Model Prediction (CoreML Inference) */
+    int32_t mm_model_predict(void* ctx,
+                             const char* model_path,
+                             const float* input_data,
+                             const int32_t* input_shape,
+                             int32_t input_shape_len,
+                             int32_t input_count,
+                             MMBuffer* out);
 
     /* Memory */
     void mm_buffer_free(MMBuffer* buf);
