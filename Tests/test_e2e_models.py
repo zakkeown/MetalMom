@@ -470,10 +470,11 @@ class TestNeuralModelPipeline:
 
         model = _model_path("beats", "beats_lstm_1")
 
-        # Beat models expect spectral features.  Create a synthetic input
-        # with the correct input dimensionality.
-        # Beat LSTM models take (seq_len, input_dim) -- input_dim varies
-        # but is typically 314 for madmom beat models.
+        # Read the model's expected input_dim from the CoreML spec
+        import coremltools as ct
+        spec = ct.utils.load_spec(model)
+        input_dim = int(spec.description.input[0].type.multiArrayType.shape[2])
+
         sr = 22050
         bpm = 120.0
         signal = make_click_track(bpm, duration=5.0, sr=sr)
@@ -482,30 +483,19 @@ class TestNeuralModelPipeline:
         mel = metalmom.melspectrogram(y=signal, sr=sr, n_mels=128, hop_length=441)
         log_mel = metalmom.power_to_db(mel)  # shape: (128, n_frames)
 
-        # The beat model expects (seq_len, input_dim) in rank-5 for CoreML
-        # input_dim=314 for the standard madmom beat models.
-        # Our mel features have 128 bands which differs from the expected
-        # 314 features, so we pad or adjust.
+        # Zero-pad mel features to match the model's expected input dimension
         n_frames = log_mel.shape[1]
-        input_dim = 314
-
-        # Zero-pad features to match expected input dimension
         features = np.zeros((n_frames, input_dim), dtype=np.float32)
-        features[:, :128] = log_mel.T
+        features[:, :min(128, input_dim)] = log_mel.T[:, :input_dim]
 
         # Reshape to rank-5 for CoreML: (seq_len, 1, input_dim, 1, 1)
         features_5d = features.reshape(n_frames, 1, input_dim, 1, 1)
 
-        try:
-            activations = predict_model(model, features_5d)
-        except RuntimeError as e:
-            pytest.skip(f"Beat model inference failed: {e}")
+        activations = predict_model(model, features_5d)
 
         # Flatten activations to 1D
         act = activations.ravel()
-
-        if len(act) == 0:
-            pytest.skip("Beat model produced empty activations")
+        assert len(act) > 0, "Beat model produced empty activations"
 
         # Normalize to [0, 1]
         act_max = act.max()
@@ -531,6 +521,11 @@ class TestNeuralModelPipeline:
 
         model = _model_path("onsets", "onsets_rnn_1")
 
+        # Read the model's expected input_dim from the CoreML spec
+        import coremltools as ct
+        spec = ct.utils.load_spec(model)
+        input_dim = int(spec.description.input[0].type.multiArrayType.shape[2])
+
         sr = 22050
         signal, true_onsets = make_sine_bursts(
             [1000.0], interval=0.5, burst_dur=0.05, duration=3.0, sr=sr
@@ -539,22 +534,16 @@ class TestNeuralModelPipeline:
         mel = metalmom.melspectrogram(y=signal, sr=sr, n_mels=128, hop_length=441)
         log_mel = metalmom.power_to_db(mel)
 
+        # Zero-pad mel features to match the model's expected input dimension
         n_frames = log_mel.shape[1]
-        # Onset RNN models typically expect input_dim=314
-        input_dim = 314
         features = np.zeros((n_frames, input_dim), dtype=np.float32)
-        features[:, :128] = log_mel.T
+        features[:, :min(128, input_dim)] = log_mel.T[:, :input_dim]
         features_5d = features.reshape(n_frames, 1, input_dim, 1, 1)
 
-        try:
-            activations = predict_model(model, features_5d)
-        except RuntimeError as e:
-            pytest.skip(f"Onset model inference failed: {e}")
+        activations = predict_model(model, features_5d)
 
         act = activations.ravel()
-
-        if len(act) == 0:
-            pytest.skip("Onset model produced empty activations")
+        assert len(act) > 0, "Onset model produced empty activations"
 
         # Normalize
         act_max = act.max()
