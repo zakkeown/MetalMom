@@ -54,3 +54,9 @@ packages = ["python/metalmom"]
 
 [tool.pytest.ini_options]
 testpaths = ["Tests"]
+markers = [
+    "models: tests that require converted CoreML models on disk",
+    "parity: numerical parity tests comparing CoreML vs numpy golden output",
+    "e2e: end-to-end pipeline tests with synthesized audio",
+    "metal: tests that require Metal GPU (skipped in CI)",
+]

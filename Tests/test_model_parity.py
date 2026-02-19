@@ -31,6 +31,8 @@ import glob
 import numpy as np
 import pytest
 
+pytestmark = [pytest.mark.models, pytest.mark.parity]
+
 # Add the conversion directory to path for imports
 _CONV_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "models", "conversion"

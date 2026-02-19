@@ -22,7 +22,10 @@ try:
 except (ImportError, OSError):
     HAS_METALMOM = False
 
-pytestmark = pytest.mark.skipif(not HAS_METALMOM, reason="metalmom not available")
+pytestmark = [
+    pytest.mark.skipif(not HAS_METALMOM, reason="metalmom not available"),
+    pytest.mark.e2e,
+]
 
 
 # ---------------------------------------------------------------------------
