@@ -19,7 +19,6 @@ the same weight layout conventions as madmom:
 """
 
 import numpy as np
-from scipy.signal import correlate2d
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +41,7 @@ def relu(x):
 
 def elu(x, alpha=1.0):
     """Exponential linear unit."""
-    return np.where(x > 0, x, alpha * (np.exp(x) - 1.0))
+    return np.where(x >= 0, x, alpha * (np.exp(x) - 1.0))
 
 
 def softmax(x, axis=-1):
