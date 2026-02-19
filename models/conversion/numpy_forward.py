@@ -834,6 +834,9 @@ def _run_standard_cnn(layers, seq_len):
     Input is (1, in_channels, H, W) throughout the conv/bn/pool stack.
     If the model ends with AverageLayer, global average pooling is applied.
     If dense layers follow, the tensor is flattened to 2D first.
+
+    The time dimension (seq_len) is automatically bumped to the minimum
+    required by the layer stack if the caller-supplied value is too small.
     """
     # Find first conv layer to determine input shape
     first_conv = None
@@ -846,6 +849,11 @@ def _run_standard_cnn(layers, seq_len):
         raise ValueError("No ConvolutionalLayer found in CNN model")
 
     in_channels = first_conv.weights.shape[0]
+
+    # Ensure seq_len is large enough for this architecture
+    min_h, _min_w = _compute_min_cnn_spatial(layers)
+    if seq_len < min_h:
+        seq_len = min_h
 
     # Determine spatial dimensions from the model structure
     # Use a reasonable default based on typical madmom CNN inputs
@@ -883,6 +891,68 @@ def _run_standard_cnn(layers, seq_len):
         x = x.reshape(x.shape[0], -1)
 
     return x
+
+
+def _compute_min_cnn_spatial(layers):
+    """
+    Compute the minimum (H, W) input dimensions needed for a standard CNN.
+
+    Works backwards through the layer stack: each conv/pool layer imposes a
+    minimum input size so that the output is at least 1x1.  Pad layers
+    *reduce* the minimum (they add pixels).
+
+    Returns
+    -------
+    (min_h, min_w) : tuple of int
+        The minimum height (time) and width (frequency) dimensions.
+    """
+    min_h = 1
+    min_w = 1
+
+    for layer in reversed(layers):
+        name = layer_type_name(layer)
+
+        if name == "ConvolutionalLayer":
+            kH, kW = layer.weights.shape[2], layer.weights.shape[3]
+            stride = getattr(layer, "stride", 1)
+            if hasattr(stride, "__len__"):
+                sH = int(stride[0])
+                sW = int(stride[1]) if len(stride) > 1 else sH
+            else:
+                sH = sW = int(stride)
+            # h_out = (h_in - kH) // sH + 1 >= min_h
+            # => h_in >= (min_h - 1) * sH + kH
+            min_h = (min_h - 1) * sH + kH
+            min_w = (min_w - 1) * sW + kW
+
+        elif name == "MaxPoolLayer":
+            size = layer.size
+            stride = layer.stride
+            if hasattr(size, "__len__"):
+                pH, pW = int(size[0]), int(size[1])
+            else:
+                pH = pW = int(size)
+            if hasattr(stride, "__len__"):
+                sH, sW = int(stride[0]), int(stride[1])
+            else:
+                sH = sW = int(stride)
+            min_h = (min_h - 1) * sH + pH
+            min_w = (min_w - 1) * sW + pW
+
+        elif name == "PadLayer":
+            p = int(layer.width)
+            min_h = max(1, min_h - 2 * p)
+            min_w = max(1, min_w - 2 * p)
+
+        elif name == "AverageLayer":
+            # Global average pooling accepts any spatial size >= 1
+            min_h = max(min_h, 1)
+            min_w = max(min_w, 1)
+
+        # BatchNormLayer, StrideLayer, FeedForwardLayer don't change spatial
+        # requirements (Stride/Dense flatten; they accept any input).
+
+    return min_h, min_w
 
 
 def _detect_cnn_freq_dim(layers, in_channels, seq_len):

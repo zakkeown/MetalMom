@@ -368,3 +368,61 @@ class TestCRF:
     def test_golden_returns_none(self, model):
         inp, out = generate_golden(model)
         assert inp is None and out is None
+
+
+# ---------------------------------------------------------------------------
+# Exhaustive parameterized test: every pkl model
+# ---------------------------------------------------------------------------
+
+import glob
+
+
+def _discover_all_pkl_models():
+    """
+    Discover all pkl files under the madmom models directory.
+
+    Skips the ``patterns/`` subdirectory (not neural network models).
+    Returns a list of (test_id, absolute_path) tuples sorted by relative path.
+    """
+    all_pkls = sorted(
+        glob.glob(os.path.join(MODELS_BASE, "**", "*.pkl"), recursive=True)
+    )
+    results = []
+    for path in all_pkls:
+        if "/patterns/" in path:
+            continue
+        rel = os.path.relpath(path, MODELS_BASE)
+        results.append(pytest.param(path, id=rel))
+    return results
+
+
+@pytest.mark.parametrize("pkl_path", _discover_all_pkl_models())
+def test_all_models_produce_valid_output(pkl_path):
+    """
+    Validate that every madmom pkl model produces valid forward-pass output.
+
+    For each neural model (non-CRF):
+      - Output is not None
+      - Output is 2-dimensional
+      - Output contains no NaN or Inf values
+      - Output is non-empty (size > 0)
+
+    CRF models are expected to return None (no neural forward pass).
+    """
+    model = load_model(pkl_path)
+    mtype, _data = classify_model(model)
+
+    if mtype == "crf":
+        out = run_model_forward(model)
+        assert out is None, f"CRF model should return None, got {type(out)}"
+        return
+
+    np.random.seed(42)
+    # CNN models may need fewer time frames; recurrent/DNN use more
+    seq_len = 15 if mtype == "cnn" else 20
+    out = run_model_forward(model, seq_len=seq_len)
+
+    assert out is not None, f"[{mtype}] output is None"
+    assert out.ndim == 2, f"[{mtype}] expected 2D output, got ndim={out.ndim}"
+    assert np.all(np.isfinite(out)), f"[{mtype}] output contains NaN or Inf"
+    assert out.size > 0, f"[{mtype}] output is empty"
