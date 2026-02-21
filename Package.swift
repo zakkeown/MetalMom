@@ -10,11 +10,9 @@ let package = Package(
         .library(name: "MetalMomBridgeStatic", type: .static, targets: ["MetalMomBridge"]),
     ],
     targets: [
-        .target(
+        .systemLibrary(
             name: "MetalMomCBridge",
-            dependencies: [],
-            path: "Sources/MetalMomCBridge",
-            publicHeadersPath: "include"
+            path: "Sources/MetalMomCBridge"
         ),
         .target(
             name: "MetalMomCore",

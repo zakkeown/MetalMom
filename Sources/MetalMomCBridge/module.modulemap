@@ -1,0 +1,4 @@
+module MetalMomCBridge {
+    header "include/metalmom.h"
+    export *
+}
