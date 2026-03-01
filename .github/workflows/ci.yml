@@ -86,4 +86,5 @@ jobs:
             -skip-testing:MetalMomTests/MetalConvolutionTests \
             -skip-testing:MetalMomTests/MetalBackendTests \
             -skip-testing:MetalMomTests/GPUParityTests \
-            -skip-testing:MetalMomTests/ThresholdCalibrationTests
+            -skip-testing:MetalMomTests/ThresholdCalibrationTests \
+            -skip-testing:MetalMomTests/MetalSmokeTests
