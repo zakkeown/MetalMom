@@ -40,7 +40,7 @@ jobs:
           pip install madmom || echo "WARNING: madmom install failed, will skip madmom API checks"
 
       - name: Install MetalMom Python package
-        run: pip install -e python/
+        run: pip install -e .
 
       # ── API drift check ──────────────────────────────────────
       - name: Download previous baseline (if exists)

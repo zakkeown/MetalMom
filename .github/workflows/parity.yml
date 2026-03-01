@@ -31,7 +31,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install Python dependencies
-        run: pip install numpy cffi soundfile pytest librosa mir_eval matplotlib
+        run: pip install numpy cffi soundfile pytest librosa mir_eval matplotlib && pip install -e .
 
       # ── Parity tests ────────────────────────────────────────
       - name: Run parity tests
