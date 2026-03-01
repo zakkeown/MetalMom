@@ -105,6 +105,15 @@ def build_issue_title(report: dict) -> str:
     return f"API drift: {total_new} new uncovered function(s) in {lib_str}"
 
 
+def _ensure_labels_exist(labels: list[str]) -> None:
+    """Create any missing labels so gh issue create doesn't fail."""
+    for label in labels:
+        subprocess.run(
+            ["gh", "label", "create", label, "--force"],
+            capture_output=True, text=True,
+        )
+
+
 def file_issue(title: str, body: str, labels: list[str], dry_run: bool) -> bool:
     """Create a GitHub issue using the gh CLI."""
     cmd = ["gh", "issue", "create", "--title", title, "--body", body]
@@ -119,6 +128,7 @@ def file_issue(title: str, body: str, labels: list[str], dry_run: bool) -> bool:
         return True
 
     print(f"Creating issue: {title}")
+    _ensure_labels_exist(labels)
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         print(f"Issue created: {result.stdout.strip()}")
