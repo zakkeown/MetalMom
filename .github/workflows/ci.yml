@@ -56,6 +56,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Build for iOS Simulator
         run: |
@@ -70,3 +72,18 @@ jobs:
             -scheme MetalMomBridgeStatic \
             -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation
+
+      - name: Run Swift tests (iOS Simulator, skip Metal/GPU classes)
+        run: |
+          xcodebuild test \
+            -scheme MetalMomCore \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -skipPackagePluginValidation \
+            -skip-testing:MetalMomTests/MetalSTFTTests \
+            -skip-testing:MetalMomTests/MetalMatmulTests \
+            -skip-testing:MetalMomTests/MetalElementwiseTests \
+            -skip-testing:MetalMomTests/MetalReductionTests \
+            -skip-testing:MetalMomTests/MetalConvolutionTests \
+            -skip-testing:MetalMomTests/MetalBackendTests \
+            -skip-testing:MetalMomTests/GPUParityTests \
+            -skip-testing:MetalMomTests/ThresholdCalibrationTests
