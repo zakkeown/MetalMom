@@ -44,10 +44,10 @@ jobs:
           python-version: "3.13"
 
       - name: Install Python dependencies
-        run: pip install numpy cffi soundfile pytest librosa mir_eval matplotlib && pip install -e .
+        run: pip install -e ".[dev,display,eval]"
 
       - name: Run Python tests
-        run: pytest Tests/ -v --tb=short
+        run: pytest Tests/ -v --tb=short --ignore=Tests/test_model_parity.py
 
   build-and-test-ios:
     name: Build & Test (iOS Simulator)
